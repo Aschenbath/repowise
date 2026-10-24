@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -40,6 +40,7 @@ import {
   useWorkspaceArchitecture,
 } from "@/lib/hooks/use-workspace";
 import { httpLinkedStat } from "@/lib/http-link-coverage";
+import { markSystemMap, observeLongTasks } from "@/lib/system-map-perf";
 import { useRepoContracts } from "./use-repo-contracts";
 
 const LENSES: readonly SystemMapLens[] = ["none", "blast", "breaking", "conformance", "core"];
@@ -71,6 +72,11 @@ export default function SystemMapPage() {
   const { data: architecture, error: architectureError } = useWorkspaceArchitecture();
   const { data: conformance, error: conformanceError } = useWorkspaceConformance();
   const { data: breaking, error: breakingError } = useWorkspaceBreakingChanges();
+
+  useEffect(() => observeLongTasks(), []);
+  useEffect(() => {
+    if (graph) markSystemMap("data");
+  }, [graph]);
 
   // Selection, lens and blast target live in the URL, so a view can be linked to.
   const selection = useMemo<SystemMapSelection>(() => {
@@ -233,6 +239,7 @@ export default function SystemMapPage() {
             {...(overlay ? { overlay } : {})}
             selection={selection}
             onSelectionChange={onSelectionChange}
+            onPhase={markSystemMap}
             drawer={drawer}
             toolbar={
               <SystemMapLensControl

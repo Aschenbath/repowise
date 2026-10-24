@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import type { CrossRepoBlastRadius, GraphEvidence, SystemEdge, SystemGraph, SystemNode } from "@repowise-dev/types";
 import { SystemMap } from "../../src/workspace/system-map/system-map";
 import { Segmented, SystemMapFilters } from "../../src/workspace/system-map/system-map-filters";
@@ -449,6 +449,24 @@ describe("SystemMap chrome placement", () => {
     expect(within(dialog).getByText(/api provides 2 contracts/i)).toBeInTheDocument();
     const flow = container.querySelector(".react-flow")!;
     expect(flow.contains(dialog)).toBe(false);
+  });
+
+  it("reports aggregate, layout and paint to onPhase, in order", async () => {
+    const onPhase = vi.fn();
+    render(<SystemMap graph={g} onPhase={onPhase} />);
+    await waitFor(() => expect(onPhase).toHaveBeenLastCalledWith("paint"));
+    expect(onPhase.mock.calls.map(([p]) => p)).toEqual(["aggregate", "layout", "paint"]);
+  });
+
+  it("reports layout only once the new graph's layout has run", async () => {
+    const onPhase = vi.fn();
+    const { rerender } = render(<SystemMap graph={g} onPhase={onPhase} />);
+    await waitFor(() => expect(onPhase).toHaveBeenLastCalledWith("paint"));
+    onPhase.mockClear();
+    const next = graph([...g.nodes, node("db")], [...g.edges, edge("api", "db", { kind: "db" })]);
+    rerender(<SystemMap graph={next} onPhase={onPhase} />);
+    await waitFor(() => expect(onPhase).toHaveBeenLastCalledWith("paint"));
+    expect(onPhase.mock.calls.map(([p]) => p)).toEqual(["aggregate", "layout", "paint"]);
   });
 
   it("puts the host's toolbar in the section header, not on the canvas", () => {

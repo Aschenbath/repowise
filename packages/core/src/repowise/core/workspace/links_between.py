@@ -23,7 +23,7 @@ from repowise.core.workspace.system_graph import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable, Iterator, Sequence
 
 __all__ = ["A_TO_B", "B_TO_A", "links_between"]
 
@@ -34,9 +34,7 @@ B_TO_A = "b_to_a"
 
 def links_between(
     nodes: Sequence[dict],
-    contracts: Iterable[dict],
-    contract_links: Iterable[dict],
-    service_links: Iterable[dict] = (),
+    store: dict,
     *,
     a: str,
     b: str,
@@ -46,6 +44,10 @@ def links_between(
     offset: int = 0,
 ) -> dict[str, Any] | None:
     """The links between service nodes *a* and *b*, both directions, paged.
+
+    *nodes* are ``system_graph.json``'s nodes; *store* is the parsed
+    ``contracts.json`` payload (``contracts``, ``contract_links`` and, when
+    present, ``service_links``).
 
     Each row is a contract-link row (:func:`.reads.link_row`) plus its edge
     ``kind``, its ``direction`` (:data:`A_TO_B` when *a* is the consumer) and
@@ -60,15 +62,41 @@ def links_between(
 
     None when *a* or *b* is not a node of the graph.
     """
-    node_ids = {n["id"]: n for n in nodes}
-    if a not in node_ids or b not in node_ids:
+    by_id = {n["id"]: n for n in nodes}
+    if a not in by_id or b not in by_id:
         return None
-    boundaries = boundaries_from_nodes(nodes)
-    repos = {node_ids[a]["repo"], node_ids[b]["repo"]}
+    repos = {by_id[a]["repo"], by_id[b]["repo"]}
     terms = (q or "").lower().split()
+    matched = [
+        m
+        for m in _pair_links(nodes, store, a, b, repos)
+        if not terms or _matches_terms(_link_haystack(m[2]), terms)
+    ]
 
-    matched: list[tuple[str, str, dict]] = []
-    for lk in [*contract_links, *service_links]:
+    totals: dict[tuple[str, str], int] = {}
+    for direction, link_kind, _ in matched:
+        totals[(link_kind, direction)] = totals.get((link_kind, direction), 0) + 1
+
+    rows = sorted((m for m in matched if kind is None or m[1] == kind), key=_row_order)
+    origins = _origins(store.get("contracts", []), repos)
+    return {
+        "a": a,
+        "b": b,
+        "links": [_row(lk, k, d, origins) for d, k, lk in rows[offset : offset + limit]],
+        "total": len(rows),
+        "totals": [{"kind": k, "direction": d, "count": n} for (k, d), n in sorted(totals.items())],
+    }
+
+
+def _pair_links(
+    nodes: Sequence[dict], store: dict, a: str, b: str, repos: set[str]
+) -> Iterator[tuple[str, str, dict]]:
+    """``(direction, edge kind, link)`` for every stored link from one of *a*, *b* to the other."""
+    if a == b:
+        return  # a service's calls into itself are never an edge
+    boundaries = boundaries_from_nodes(nodes)
+    direction_of = {(a, b): A_TO_B, (b, a): B_TO_A}
+    for lk in [*store.get("contract_links", []), *store.get("service_links", [])]:
         if lk.get("consumer_repo") not in repos or lk.get("provider_repo") not in repos:
             continue
         # The builder's own reading of a link: a service link has no provider
@@ -77,42 +105,20 @@ def links_between(
         target = resolve_service_id(
             lk["provider_repo"], lk.get("provider_file") or None, boundaries
         )
-        if (source, target) == (a, b) and a != b:
-            direction = A_TO_B
-        elif (source, target) == (b, a) and a != b:
-            direction = B_TO_A
-        else:
-            continue
-        if terms and not _matches_terms(_link_haystack(lk), terms):
-            continue
-        matched.append((direction, edge_kind_for_contract_type(lk.get("contract_type", "")), lk))
+        direction = direction_of.get((source, target))
+        if direction is not None:
+            yield direction, edge_kind_for_contract_type(lk.get("contract_type", "")), lk
 
-    totals: dict[tuple[str, str], int] = {}
-    for direction, link_kind, _ in matched:
-        totals[(link_kind, direction)] = totals.get((link_kind, direction), 0) + 1
 
-    rows = [m for m in matched if kind is None or m[1] == kind]
-    rows.sort(
-        key=lambda m: (
-            m[0],
-            m[1],
-            m[2].get("contract_id") or "",
-            m[2].get("consumer_file") or "",
-            m[2].get("provider_file") or "",
-        )
+def _row_order(m: tuple[str, str, dict]) -> tuple[str, ...]:
+    direction, kind, lk = m
+    return (
+        direction,
+        kind,
+        lk.get("contract_id") or "",
+        lk.get("consumer_file") or "",
+        lk.get("provider_file") or "",
     )
-    origins = _origins(contracts, repos)
-    page = [
-        _row(lk, link_kind, direction, origins)
-        for direction, link_kind, lk in rows[offset : offset + limit]
-    ]
-    return {
-        "a": a,
-        "b": b,
-        "links": page,
-        "total": len(rows),
-        "totals": [{"kind": k, "direction": d, "count": n} for (k, d), n in sorted(totals.items())],
-    }
 
 
 def _origins(contracts: Iterable[dict], repos: set[str]) -> dict[tuple, str | None]:

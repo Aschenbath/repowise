@@ -21,13 +21,7 @@ FIXTURE = Path(__file__).parents[2] / "fixtures" / "workspace_links" / "eshop.js
 
 def _eshop(**kwargs):
     data = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    return links_between(
-        data["nodes"],
-        data["contracts"],
-        data["contract_links"],
-        data["service_links"],
-        **kwargs,
-    )
+    return links_between(data["nodes"], data, **kwargs)
 
 
 def test_webapp_and_ordering_api_share_eight_links_all_one_way():
@@ -137,13 +131,11 @@ def test_two_services_in_one_repo_resolve_like_the_graph():
     graph = build_system_graph(contracts, links, CrossRepoOverlay(), boundaries).to_dict()
     cart, orders = "shop::services/cart", "shop::services/orders"
 
-    result = links_between(
-        graph["nodes"],
-        [c.to_dict() for c in contracts],
-        [lk.to_dict() for lk in links],
-        a=cart,
-        b=orders,
-    )
+    store = {
+        "contracts": [c.to_dict() for c in contracts],
+        "contract_links": [lk.to_dict() for lk in links],
+    }
+    result = links_between(graph["nodes"], store, a=cart, b=orders)
 
     assert result["totals"] == [
         {"kind": "http", "direction": A_TO_B, "count": 2},
@@ -153,7 +145,4 @@ def test_two_services_in_one_repo_resolve_like_the_graph():
     assert weights[(cart, orders)] == 2
     assert weights[(orders, cart)] == 1
     assert result["links"][0]["provider_origin"] is None  # stored before origins
-    assert (
-        links_between(graph["nodes"], [], [lk.to_dict() for lk in links], a=cart, b=cart)["total"]
-        == 0
-    )
+    assert links_between(graph["nodes"], store, a=cart, b=cart)["total"] == 0

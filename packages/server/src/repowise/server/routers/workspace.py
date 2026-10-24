@@ -632,9 +632,11 @@ async def get_links_between(
     result = (
         links_between(
             graph.get("nodes", []),
-            enricher.contracts,
-            enricher.contract_links,
-            enricher.service_links,
+            {
+                "contracts": enricher.contracts,
+                "contract_links": enricher.contract_links,
+                "service_links": enricher.service_links,
+            },
             a=a,
             b=b,
             kind=kind,

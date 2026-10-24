@@ -17,7 +17,7 @@ import { EmptyState } from "@repowise-dev/ui/shared/empty-state";
 import { Callout } from "@repowise-dev/ui/shared/callout";
 import { OverviewSection } from "@repowise-dev/ui/overview/section";
 import { StatRibbon, type RibbonStat } from "@repowise-dev/ui/stats/stat-ribbon";
-import { healthMark } from "@repowise-dev/ui/workspace/system-map";
+import { healthMark } from "@repowise-dev/ui/health/tokens";
 import { formatDate, formatNumber } from "@repowise-dev/ui/lib/format";
 import { getWorkspaceEstate } from "@/lib/api/workspace";
 import { EstateTable } from "./estate-table";
@@ -450,14 +450,14 @@ function DanglingTable({ check, t }: { check: EstateCheck; t: Translator }) {
   );
 }
 
-/** The three-band mark beside each repo's health, as the system map draws it. */
+/** The three-band mark beside each repo's health, as every health mark draws it. */
 function HealthMark({ score, t }: { score: number; t: Translator }) {
-  const mark = healthMark(score * 10); // the shared helper reads 0-100; the store holds 1-10
+  const mark = healthMark(score);
   return (
     <span className="inline-flex items-center gap-1.5">
       <span aria-hidden className="h-1.5 w-1.5 rounded-full" style={{ background: mark.color }} />
       <span className="font-mono font-semibold tabular-nums text-[var(--color-text-primary)]">{mark.value}</span>
-      <span className="text-xs text-[var(--color-text-secondary)]">{t(`band.${mark.label}`)}</span>
+      <span className="text-xs text-[var(--color-text-secondary)]">{t(`band.${mark.band}`)}</span>
     </span>
   );
 }

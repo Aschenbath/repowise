@@ -1717,9 +1717,9 @@
       "gated": "暂不提供"
     },
     "band": {
-      "Healthy": "健康",
-      "Warning": "警告",
-      "Alert": "告警"
+      "healthy": "健康",
+      "warning": "警告",
+      "alert": "告警"
     },
     "danglingReason": {
       "no_provider": "工作区内没有提供方",

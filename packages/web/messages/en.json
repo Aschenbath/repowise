@@ -1717,9 +1717,9 @@
       "gated": "Held back"
     },
     "band": {
-      "Healthy": "Healthy",
-      "Warning": "Warning",
-      "Alert": "Alert"
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "alert": "Alert"
     },
     "danglingReason": {
       "no_provider": "no provider in the workspace",

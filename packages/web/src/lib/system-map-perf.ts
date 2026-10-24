@@ -7,6 +7,7 @@
  * is sent anywhere.
  */
 
+import { useEffect } from "react";
 import type { SystemMapPhase } from "@repowise-dev/ui/workspace/system-map";
 
 export type SystemMapMark = "data" | SystemMapPhase;
@@ -31,4 +32,12 @@ export function observeLongTasks(): () => void {
   });
   observer.observe({ type: "longtask" });
   return () => observer.disconnect();
+}
+
+/** Marks `sm:data` each time a graph arrives and records long tasks while mounted. */
+export function useSystemMapPerfMarks(graph: unknown): void {
+  useEffect(() => observeLongTasks(), []);
+  useEffect(() => {
+    if (graph) markSystemMap("data");
+  }, [graph]);
 }

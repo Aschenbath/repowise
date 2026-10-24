@@ -124,58 +124,64 @@ function emptyDiagnostics(totalLinks: number): ExtractionDiagnostics {
   };
 }
 
-export function makeSyntheticSystemGraph({
-  services,
-  edges,
-  groups = 1,
-  seed = 1,
-}: SyntheticSystemGraphOptions): SyntheticSystemGraph {
-  if (services < 2) throw new Error("a synthetic system graph needs at least two services");
-  const random = rng(seed);
-  const pick = <T,>(items: readonly T[]): T => items[Math.floor(random() * items.length)] as T;
-  const between = ([lo, hi]: readonly [number, number]) => lo + Math.floor(random() * (hi - lo + 1));
+interface Estate {
+  ids: string[];
+  groupOf: Map<string, string>;
+  libraries: string[];
+  runtime: string[];
+  runtimeByGroup: Map<string, string[]>;
+}
 
-  const groupCount = Math.max(1, Math.min(groups, services));
+/** Service ids `g03.svc042`: a dotted family per group gives name-family grouping something to find. */
+function estate(services: number, groupCount: number): Estate {
   const libraryCount = Math.max(1, Math.round(services * LIBRARY_SHARE));
   const width = String(services - 1).length;
+  const groupWidth = String(groupCount - 1).length;
   const ids: string[] = [];
-  const groupOf: string[] = [];
-  for (let i = 0; i < services; i++) {
-    const group = `g${String(i % groupCount).padStart(String(groupCount - 1).length, "0")}`;
-    // The first `libraryCount` indices are libraries; a dotted family name per
-    // group gives name-family grouping something to find.
-    const role = i < libraryCount ? "lib" : "svc";
-    ids.push(`${group}.${role}${String(i).padStart(width, "0")}`);
-    groupOf.push(group);
-  }
-  const libraries = ids.slice(0, libraryCount);
-  const runtime = ids.slice(libraryCount);
+  const groupOf = new Map<string, string>();
   const runtimeByGroup = new Map<string, string[]>();
-  runtime.forEach((id, i) => {
-    const g = groupOf[libraryCount + i] as string;
-    runtimeByGroup.set(g, [...(runtimeByGroup.get(g) ?? []), id]);
-  });
-  const indexOf = new Map(ids.map((id, i) => [id, i]));
+  for (let i = 0; i < services; i++) {
+    const group = `g${String(i % groupCount).padStart(groupWidth, "0")}`;
+    // The first `libraryCount` indices are libraries.
+    const library = i < libraryCount;
+    const id = `${group}.${library ? "lib" : "svc"}${String(i).padStart(width, "0")}`;
+    ids.push(id);
+    groupOf.set(id, group);
+    if (!library) runtimeByGroup.set(group, [...(runtimeByGroup.get(group) ?? []), id]);
+  }
+  return { ids, groupOf, libraries: ids.slice(0, libraryCount), runtime: ids.slice(libraryCount), runtimeByGroup };
+}
 
-  // Zipf over libraries: the first few become hubs, as eShop's do.
+type Random = () => number;
+
+function pickFrom<T>(random: Random, items: readonly T[]): T {
+  return items[Math.floor(random() * items.length)] as T;
+}
+
+/** Endpoint pickers: package edges to Zipf-ranked library hubs, runtime edges mostly in-group. */
+function endpointPicker(e: Estate, random: Random): (kind: SystemEdgeKind) => [string, string] {
   const zipf: number[] = [];
-  libraries.reduce((sum, _l, r) => {
+  e.libraries.reduce((sum, _l, r) => {
     zipf.push(sum + 1 / (r + 1));
     return sum + 1 / (r + 1);
   }, 0);
   const zipfTotal = zipf[zipf.length - 1] as number;
-  const pickLibrary = () => {
-    const x = random() * zipfTotal;
-    return libraries[zipf.findIndex((c) => c >= x)] as string;
+  const runtimePool = e.runtime.length > 1 ? e.runtime : e.ids;
+  return (kind) => {
+    if (kind === "package") {
+      const source = pickFrom(random, e.ids);
+      const x = random() * zipfTotal;
+      return [source, e.libraries[zipf.findIndex((c) => c >= x)] as string];
+    }
+    const source = pickFrom(random, e.runtime.length > 0 ? e.runtime : e.ids);
+    const own = e.runtimeByGroup.get(e.groupOf.get(source) as string) ?? [];
+    const pool = own.length > 1 && random() < IN_GROUP_SHARE ? own : runtimePool;
+    return [source, pickFrom(random, pool)];
   };
+}
 
-  const pickRuntimePair = (): [string, string] => {
-    const source = runtime.length > 0 ? pick(runtime) : pick(ids);
-    const own = runtimeByGroup.get(groupOf[indexOf.get(source) as number] as string) ?? [];
-    const pool = own.length > 1 && random() < IN_GROUP_SHARE ? own : runtime.length > 1 ? runtime : ids;
-    return [source, pick(pool)];
-  };
-
+function placeEdges(e: Estate, edges: number, random: Random): SystemEdge[] {
+  const pickEnds = endpointPicker(e, random);
   const out: SystemEdge[] = [];
   const seen = new Set<string>();
   for (const [kind, count] of splitByMix(edges, ESHOP_KIND_MIX)) {
@@ -184,43 +190,47 @@ export function makeSyntheticSystemGraph({
     // Edges are unique per (source, target, kind), as the core builder merges
     // them; a bounded retry keeps an over-dense request from looping forever.
     for (let attempt = 0; placed < count && attempt < count * 50; attempt++) {
-      const [source, target] = kind === "package" ? [pick(ids), pickLibrary()] : pickRuntimePair();
+      const [source, target] = pickEnds(kind);
       const id = `${source}->${target}:${kind}`;
       if (source === target || seen.has(id)) continue;
       seen.add(id);
-      const weight = between(shape.weight);
+      const [lo, hi] = shape.weight;
+      const weight = lo + Math.floor(random() * (hi - lo + 1));
       out.push({
         id,
         source,
         target,
         kind,
         match_type: "exact",
-        confidence: pick(shape.confidence),
+        confidence: pickFrom(random, shape.confidence),
         weight,
         structural: true,
         contract_refs: Array.from({ length: weight }, (_, i) => shape.ref(source, target, i)),
-        strategy: pick(shape.strategy),
+        strategy: pickFrom(random, shape.strategy),
       });
       placed++;
     }
     if (placed < count) {
-      throw new Error(`cannot place ${count} distinct ${kind} edges among ${services} services`);
+      throw new Error(`cannot place ${count} distinct ${kind} edges among ${e.ids.length} services`);
     }
   }
+  return out;
+}
 
+/** Nodes with counts and contract types derived from their edges, as the core builder derives them. */
+function nodesFor(e: Estate, edges: readonly SystemEdge[], grouped: boolean): SyntheticSystemNode[] {
   const provided = new Map<string, number>();
   const consumed = new Map<string, number>();
   const types = new Map<string, Set<string>>();
-  for (const e of out) {
-    const type = KIND_SHAPE[e.kind]?.contractType;
+  for (const edge of edges) {
+    const type = KIND_SHAPE[edge.kind]?.contractType;
     if (!type) continue;
-    provided.set(e.target, (provided.get(e.target) ?? 0) + e.weight);
-    consumed.set(e.source, (consumed.get(e.source) ?? 0) + e.weight);
-    for (const end of [e.source, e.target]) types.set(end, (types.get(end) ?? new Set()).add(type));
+    provided.set(edge.target, (provided.get(edge.target) ?? 0) + edge.weight);
+    consumed.set(edge.source, (consumed.get(edge.source) ?? 0) + edge.weight);
+    for (const end of [edge.source, edge.target]) types.set(end, (types.get(end) ?? new Set()).add(type));
   }
-  const linked = new Set(out.flatMap((e) => [e.source, e.target]));
-
-  const nodes: SyntheticSystemNode[] = ids.map((id, i) => ({
+  const linked = new Set(edges.flatMap((edge) => [edge.source, edge.target]));
+  return e.ids.map((id) => ({
     id,
     repo: id,
     service_path: null,
@@ -232,13 +242,24 @@ export function makeSyntheticSystemGraph({
     is_orphan_provider: false,
     is_orphan_consumer: false,
     is_isolated: !linked.has(id),
-    ...(groupCount > 1 ? { group: groupOf[i] as string } : {}),
+    ...(grouped ? { group: e.groupOf.get(id) as string } : {}),
   }));
+}
 
+export function makeSyntheticSystemGraph({
+  services,
+  edges,
+  groups = 1,
+  seed = 1,
+}: SyntheticSystemGraphOptions): SyntheticSystemGraph {
+  if (services < 2) throw new Error("a synthetic system graph needs at least two services");
+  const groupCount = Math.max(1, Math.min(groups, services));
+  const e = estate(services, groupCount);
+  const out = placeEdges(e, edges, rng(seed));
   return {
     version: 2,
     generated_at: "2026-10-24T00:00:00Z",
-    nodes,
+    nodes: nodesFor(e, out, groupCount > 1),
     edges: out,
     diagnostics: emptyDiagnostics(out.length),
   };

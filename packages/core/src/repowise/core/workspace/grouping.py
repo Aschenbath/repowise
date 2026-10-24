@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -66,9 +66,10 @@ MAX_LINKAGE_PAIRS = 50_000
 #: Fixed seed for the community detection, the same one file communities use.
 LINKAGE_SEED = 42
 
-GROUP_SOURCES: tuple[str, ...] = ("tag", "name", "linked")
-
 _GROUP_TAG_PREFIX = "group:"
+
+#: A group a source found: ``(group id, label, members)``.
+_Found = tuple[str, str, list["SystemNode"]]
 _TOKEN = re.compile(r"[A-Za-z0-9]+")
 
 
@@ -78,7 +79,7 @@ class ServiceGroup:
 
     id: str  # "<source>:<key>", stable across rebuilds of the same estate
     label: str
-    source: str  # one of GROUP_SOURCES
+    source: str  # tag | name | linked
     member_count: int
 
     def to_dict(self) -> dict[str, Any]:
@@ -119,15 +120,14 @@ def _declared_name(tags: Iterable[str]) -> str | None:
     return plain[0] if plain else None
 
 
-def _by_tag(
-    nodes: list[SystemNode], repo_tags: Mapping[str, Iterable[str]]
-) -> dict[str, list[SystemNode]]:
+def _by_tag(nodes: list[SystemNode], repo_tags: Mapping[str, Iterable[str]]) -> list[_Found]:
+    """Declared groups of 2+ services."""
     groups: dict[str, list[SystemNode]] = {}
     for node in nodes:
         name = _declared_name(repo_tags.get(node.repo, ()))
         if name is not None:
             groups.setdefault(name, []).append(node)
-    return groups
+    return [(f"tag:{name}", name, m) for name, m in sorted(groups.items()) if len(m) >= 2]
 
 
 def _alias_prefix(alias: str, depth: int) -> tuple[str, str] | None:
@@ -143,36 +143,50 @@ def _alias_prefix(alias: str, depth: int) -> tuple[str, str] | None:
     return key, alias[tokens[0].start() : tokens[depth - 1].end()]
 
 
-def _by_name(nodes: list[SystemNode], estate_repos: int) -> dict[str, tuple[str, list[SystemNode]]]:
-    """Name families: ``{key: (label, members)}``, each 2+ repos and under half the estate."""
+def _families_at(
+    pool: list[SystemNode], depth: int
+) -> dict[str, tuple[str, list[SystemNode]]]:
+    """Split *pool* by the first *depth* alias tokens: ``{key: (label, members)}``."""
+    families: dict[str, tuple[str, list[SystemNode]]] = {}
+    for node in pool:
+        prefix = _alias_prefix(node.repo, depth)
+        if prefix is not None:
+            families.setdefault(prefix[0], (prefix[1], []))[1].append(node)
+    return families
+
+
+def _by_name(nodes: list[SystemNode], estate_repos: int) -> list[_Found]:
+    """Name families of 2+ repos and under half the estate, widest prefix first."""
     max_repos = estate_repos * MAX_NAME_FAMILY_SHARE
     found: dict[str, tuple[str, list[SystemNode]]] = {}
     pending: list[list[SystemNode]] = [nodes]
     for depth in range(1, MAX_NAME_DEPTH + 1):
+        families = [f for pool in pending for f in _families_at(pool, depth).items()]
         too_wide: list[list[SystemNode]] = []
-        for pool in pending:
-            families: dict[str, tuple[str, list[SystemNode]]] = {}
-            for node in pool:
-                prefix = _alias_prefix(node.repo, depth)
-                if prefix is not None:
-                    key, label = prefix
-                    families.setdefault(key, (label, []))[1].append(node)
-            for key, (label, members) in families.items():
-                repos = len({m.repo for m in members})
-                if repos < 2:
-                    continue
-                if repos < max_repos:
-                    found[key] = (label, members)
-                else:
-                    too_wide.append(members)
+        for key, (label, members) in families:
+            repos = len({m.repo for m in members})
+            if 2 <= repos < max_repos:
+                found[key] = (label, members)
+            elif repos >= 2:
+                too_wide.append(members)
         pending = too_wide
-    return found
+    return [(f"name:{key}", label, m) for key, (label, m) in sorted(found.items())]
 
 
-def _by_linkage(
-    nodes: list[SystemNode], edges: list[SystemEdge]
-) -> list[list[SystemNode]]:
-    """Seeded Louvain over runtime and data edges among *nodes*.
+def _linkage_pairs(ids: set[str], edges: list[SystemEdge]) -> dict[tuple[str, str], int]:
+    """Summed edge weight per unordered pair of *ids* over :data:`LINKAGE_KINDS`."""
+    pair_weight: dict[tuple[str, str], int] = {}
+    for edge in edges:
+        if edge.kind not in LINKAGE_KINDS or edge.source == edge.target:
+            continue
+        if edge.source in ids and edge.target in ids:
+            pair = (min(edge.source, edge.target), max(edge.source, edge.target))
+            pair_weight[pair] = pair_weight.get(pair, 0) + max(edge.weight, 1)
+    return pair_weight
+
+
+def _communities(pair_weight: dict[tuple[str, str], int]) -> list[set[str]]:
+    """Seeded Louvain over the weighted pairs.
 
     Louvain because it needs no target group count, is near-linear, ships with
     networkx (a core dependency, unlike Leiden's graspologic, which would make
@@ -180,17 +194,18 @@ def _by_linkage(
     seed and a fixed insertion order. A networkx upgrade may still move a
     borderline service between linked groups; tag and name groups never move.
     """
+    import networkx as nx  # deferred: only estates past the size gate pay the import
+
+    graph = nx.Graph()
+    graph.add_nodes_from(sorted({n for pair in pair_weight for n in pair}))
+    graph.add_weighted_edges_from((a, b, w) for (a, b), w in sorted(pair_weight.items()))
+    return nx.community.louvain_communities(graph, weight="weight", seed=LINKAGE_SEED)
+
+
+def _by_linkage(nodes: list[SystemNode], edges: list[SystemEdge]) -> list[_Found]:
+    """Linked communities of 2+ services, each labelled by its most-called member."""
     by_id = {n.id: n for n in nodes}
-    pair_weight: dict[tuple[str, str], int] = {}
-    for edge in edges:
-        if edge.kind not in LINKAGE_KINDS or edge.source == edge.target:
-            continue
-        if edge.source not in by_id or edge.target not in by_id:
-            continue
-        pair = (min(edge.source, edge.target), max(edge.source, edge.target))
-        pair_weight[pair] = pair_weight.get(pair, 0) + max(edge.weight, 1)
-    if not pair_weight:
-        return []
+    pair_weight = _linkage_pairs(set(by_id), edges)
     if len(pair_weight) > MAX_LINKAGE_PAIRS:
         _log.info(
             "Skipping linkage grouping: %d linked service pairs exceeds the %d cap",
@@ -198,14 +213,14 @@ def _by_linkage(
             MAX_LINKAGE_PAIRS,
         )
         return []
-
-    import networkx as nx  # deferred: only estates past the size gate pay the import
-
-    graph = nx.Graph()
-    graph.add_nodes_from(sorted({n for pair in pair_weight for n in pair}))
-    graph.add_weighted_edges_from((a, b, w) for (a, b), w in sorted(pair_weight.items()))
-    communities = nx.community.louvain_communities(graph, weight="weight", seed=LINKAGE_SEED)
-    return [[by_id[nid] for nid in sorted(c)] for c in communities if len(c) >= 2]
+    communities = [c for c in _communities(pair_weight) if len(c) >= 2] if pair_weight else []
+    fan_in = _fan_in(edges) if communities else {}
+    found: list[_Found] = []
+    for community in communities:
+        members = [by_id[nid] for nid in sorted(community)]
+        anchor = min(members, key=lambda m: (-fan_in.get(m.id, 0), m.name, m.id))
+        found.append((f"linked:{anchor.id}", anchor.name, members))
+    return found
 
 
 def _fan_in(edges: list[SystemEdge]) -> dict[str, int]:
@@ -215,11 +230,6 @@ def _fan_in(edges: list[SystemEdge]) -> dict[str, int]:
         if edge.kind in LINKAGE_KINDS and edge.source != edge.target:
             callers.setdefault(edge.target, set()).add(edge.source)
     return {nid: len(sources) for nid, sources in callers.items()}
-
-
-def _fan_in_anchor(members: list[SystemNode], fan_in: Mapping[str, int]) -> SystemNode:
-    """The member the most distinct services call (ties: name, then id)."""
-    return min(members, key=lambda m: (-fan_in.get(m.id, 0), m.name, m.id))
 
 
 # ---------------------------------------------------------------------------
@@ -243,30 +253,19 @@ def group_services(
 
     remaining = sorted(nodes, key=lambda n: n.id)
     estate_repos = len({n.repo for n in remaining})
-    claimed: list[tuple[ServiceGroup, list[SystemNode]]] = []
+    sources: tuple[tuple[str, Callable[[list[SystemNode]], list[_Found]]], ...] = (
+        ("tag", lambda pool: _by_tag(pool, repo_tags or {})),
+        ("name", lambda pool: _by_name(pool, estate_repos)),
+        ("linked", lambda pool: _by_linkage(pool, edges)),
+    )
+    groups: list[ServiceGroup] = []
+    assignment: dict[str, str] = {}
+    for source, find in sources:
+        for group_id, label, members in find(remaining):
+            groups.append(ServiceGroup(group_id, label, source, len(members)))
+            assignment.update((m.id, group_id) for m in members)
+        remaining = [n for n in remaining if n.id not in assignment]
 
-    def claim(group_id: str, label: str, source: str, members: list[SystemNode]) -> None:
-        claimed.append((ServiceGroup(group_id, label, source, len(members)), members))
-
-    for name, members in sorted(_by_tag(remaining, repo_tags or {}).items()):
-        if len(members) >= 2:
-            claim(f"tag:{name}", name, "tag", members)
-    taken = {m.id for _, members in claimed for m in members}
-    remaining = [n for n in remaining if n.id not in taken]
-
-    for key, (label, members) in sorted(_by_name(remaining, estate_repos).items()):
-        claim(f"name:{key}", label, "name", members)
-    taken = {m.id for _, members in claimed for m in members}
-    remaining = [n for n in remaining if n.id not in taken]
-
-    linked = _by_linkage(remaining, edges)
-    fan_in = _fan_in(edges) if linked else {}
-    for members in linked:
-        anchor = _fan_in_anchor(members, fan_in)
-        claim(f"linked:{anchor.id}", anchor.name, "linked", members)
-
-    if len(claimed) < MIN_GROUPS:
+    if len(groups) < MIN_GROUPS:
         return {}, []
-    assignment = {m.id: group.id for group, members in claimed for m in members}
-    groups = sorted((g for g, _ in claimed), key=lambda g: (-g.member_count, g.id))
-    return assignment, groups
+    return assignment, sorted(groups, key=lambda g: (-g.member_count, g.id))

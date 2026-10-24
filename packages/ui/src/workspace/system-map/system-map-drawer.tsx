@@ -628,6 +628,7 @@ function EdgeBody({
           weightLabel: weightLabel(edge),
           evidence: links ?? [],
           refs,
+          refCount: keptRefs,
           pairs,
           cycles: myCycles.map((c) => c.nodes.map(name)),
           flavor,

@@ -26,7 +26,7 @@ _DROPPED_KEYS = frozenset({"diagnostics", "repo_provenance"})
 
 def _lean_edge(raw: dict[str, Any]) -> dict[str, Any]:
     edge = {**raw, **SystemEdge.from_dict(raw).to_dict()}
-    refs = edge.pop("contract_refs")
+    refs = edge.pop("contract_refs") or []
     edge["ref_count"] = len(set(refs))
     # A co-change edge's refs are its file pairs, which nothing else serves
     # per service pair, so the drawer keeps them (bounded by MAX_EDGE_REFS). A

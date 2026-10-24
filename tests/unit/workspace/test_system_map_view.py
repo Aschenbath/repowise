@@ -80,5 +80,18 @@ def test_input_is_not_mutated() -> None:
     assert graph == _graph()
 
 
+def test_old_artifact_edges_read_with_defaults() -> None:
+    graph = {
+        "nodes": [],
+        "edges": [
+            {"id": "a->b:package", "source": "a", "target": "b", "kind": "package", "contract_refs": None},
+        ],
+    }
+    (edge,) = lean_system_graph(graph)["edges"]
+    assert edge["ref_count"] == 0
+    assert edge["strategy"] == "manifest"  # as the stored-graph reader backfills it
+    assert edge["structural"] is True
+
+
 def test_empty_graph() -> None:
     assert lean_system_graph({}) == {"version": 1, "generated_at": "", "nodes": [], "edges": []}

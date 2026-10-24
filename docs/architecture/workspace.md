@@ -127,7 +127,9 @@ links are appended after it.
    internal DNS name such as `catalog.svc.cluster.local`), and the service-name map.
    The consumer's `meta` records `target_repo`, `target_via` (the source) and, for a
    map entry, `target_evidence` (the file). A public dotted host nothing maps is
-   `external` and never linked.
+   `external` and never linked. So is a call whose base token and path match a
+   `matching/third_party.py` row (`${SUPABASE_URL}/rest/v1/...`) and that nothing
+   above placed.
 3. **Exact pass** (`matching/__init__.py::_exact_pass`): normalized ids, HTTP method
    and gRPC service wildcards included. Strategy `exact_id`, `pattern_matched` for a
    pattern subscription, `service_mapped` when the provider sits in the consumer's
@@ -280,6 +282,7 @@ Details the table compresses:
 | Service-name sources | `service_names/__init__.py` `SOURCES`, sorted by name | `name`, `filenames`, optional `under` and `marker`, `read` | `test_service_names.py` |
 | Evidence rules | `graph_evidence.py` `_RULES` | One function returning a reason or `None` | `test_graph_evidence.py` |
 | Network probe | `network_probe.py` `PROBE_ROWS`, sorted by language | `language`, `extensions`, `tokens`, `hash_comments` | `test_network_probe.py` |
+| Third-party services | `matching/third_party.py` `THIRD_PARTY_SERVICES`, sorted by name | `name`, `base_words`, `paths` | `test_third_party_services.py` |
 | Edge kinds | `system_graph.py` `_CONTRACT_TYPE_TO_EDGE_KIND` | Contract type to edge kind | `test_system_graph.py::test_contract_type_to_edge_kind` |
 | Package ecosystems | `manifests.py` `ECOSYSTEMS` | Service markers and an optional manifest scanner | `test_manifests.py` |
 

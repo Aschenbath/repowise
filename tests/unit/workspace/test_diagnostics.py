@@ -335,3 +335,26 @@ def test_coverage_is_not_stated_before_the_probe_ran():
     diag = build_diagnostics([_consumer("web", "http::GET::/u")], [], {"web": {}})
     assert diag.unrecognised_call_files is None
     assert diag.http_consumer_coverage is None
+
+
+def test_an_unlinked_call_from_a_script_is_left_out_of_every_count():
+    contracts = [
+        _consumer("web", "http::GET::/docs", file="scripts/docs-parity.mjs"),
+        _consumer("web", "http::GET::/missing", file="src/app.ts"),
+    ]
+    diag = build_diagnostics(contracts, [])
+    assert [u.file_path for u in diag.unmatched_consumers] == ["src/app.ts"]
+    assert diag.total_consumers == 1
+    assert diag.http_consumers_read == 1
+
+
+def test_a_linked_call_from_a_script_still_counts():
+    contracts = [
+        _provider("api", "http::GET::/users"),
+        _consumer("web", "http::GET::/users", file="scripts/seed.py"),
+    ]
+    link = _link("http::GET::/users", "api", "web")
+    link.consumer_file = "scripts/seed.py"
+    diag = build_diagnostics(contracts, [link])
+    assert diag.http_consumers_linked == 1
+    assert diag.http_consumers_read == 1

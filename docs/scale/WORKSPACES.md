@@ -229,6 +229,9 @@ A route or topic that exists only in a test is a fixture, not a service contract
 Calls to a literal
 third-party host (Stripe, Formspree, ...) that is not a workspace service are
 excluded from matching and reported under the `external_host` diagnostics reason.
+So is a call through a base variable that names a well-known service, on that
+service's API paths (`${SUPABASE_URL}/rest/v1/...`), unless the workspace maps the
+variable to one of its repos.
 
 **MassTransit.** A message is routed by its .NET type, so its contract id is
 `topic::<namespace>:<type>` (lowercased), not a string. A type counts as a message
@@ -341,7 +344,7 @@ The report covers:
 - **In-service consumers** (`in_service_consumers`, reason `internal_only`): the only matching provider is in the same repo + service. They are served, so they are counted apart and never listed as unmatched.
 - **Orphan providers**, endpoints declared but never consumed by any repo. One row per repo, service and id; a table declared in a model and a migration lists the second file under `other_files`.
 - **Weak links**, matched links below the confidence threshold.
-- **Extraction coverage**: how many contracts came from the parsed symbol table (`index`) versus a text dialect (`regex`), and how many HTTP client calls were located but could not be resolved to an endpoint. The HTTP coverage percentage is calls resolved over calls located, plus one per file that makes a network call (a client library, channel or raw request) no dialect read, so an unsupported client lowers the figure instead of dropping out of it. Each such file counts once, so it is a floor on what was missed, not total recall. It is the figure that turns a large orphan-provider count from alarming into explained. A call read is not a call linked, so the headline leads with the HTTP calls that linked to another service (`http_consumers_linked`, `http_link_coverage`, same denominator) and then says where the read but unlinked calls went.
+- **Extraction coverage**: how many contracts came from the parsed symbol table (`index`) versus a text dialect (`regex`), and how many HTTP client calls were located but could not be resolved to an endpoint. The HTTP coverage percentage is calls resolved over calls located, plus one per file that makes a network call (a client library, channel or raw request) no dialect read, so an unsupported client lowers the figure instead of dropping out of it. Each such file counts once, so it is a floor on what was missed, not total recall. Files classed as tooling or build (`scripts/`, `.github/`, migrations, build configs) are left out of the probe, and a call from one that linked nothing is left out of every count, since it is not a call of the running system. It is the figure that turns a large orphan-provider count from alarming into explained. A call read is not a call linked, so the headline leads with the HTTP calls that linked to another service (`http_consumers_linked`, `http_link_coverage`, same denominator) and then says where the read but unlinked calls went.
 
 The same data is available over REST at `GET /api/workspace/diagnostics` and is embedded in the system graph artifact's `diagnostics` block.
 

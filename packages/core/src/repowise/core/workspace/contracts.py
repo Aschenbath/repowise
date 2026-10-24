@@ -75,6 +75,8 @@ CONTRACTS_FILENAME = "contracts.json"
 # (see :mod:`.network_probe`). Gateway routes (Spring Cloud Gateway, Zuul)
 # rewrite the calls they forward and add gateway-to-service service links.
 # Go routes from chi, fiber, gorilla/mux and Go 1.22 method patterns are read.
+# Next.js route handlers exported from a brace list are read, and the probe
+# skips tooling and build files.
 CONTRACTS_VERSION = 15
 
 #: ``meta["kind"]`` of a topic contract: the destination a broker call names.
@@ -591,6 +593,7 @@ async def run_contract_extraction(
     from .extractors.masstransit import MessageTypeIndex
     from .matching import annotate_consumer_targets, run_matching
     from .matching.base_paths import apply_base_paths
+    from .matching.third_party import mark_third_party_calls
     from .service_names import ServiceNameMap, build_service_name_map, service_names_fingerprint
 
     contract_config = ws_config.contracts
@@ -674,6 +677,7 @@ async def run_contract_extraction(
         names = await asyncio.to_thread(build_service_name_map, repo_paths, workspace_root)
     apply_base_paths(all_contracts, names.base_paths)
     annotate_consumer_targets(all_contracts, contract_config.service_bases, names)
+    mark_third_party_calls(all_contracts)
     matched = run_matching(all_contracts, names.routes)
     links = matched.links
 

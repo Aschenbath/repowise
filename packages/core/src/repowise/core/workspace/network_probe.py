@@ -24,11 +24,24 @@ from dataclasses import dataclass
 from functools import cache
 
 from repowise.core.analysis.security.masking import mask_comments_and_strings, mask_dialect
+from repowise.core.code_origin import CodeOrigin, path_origin
 from repowise.core.workspace.extractors import langs
 from repowise.core.workspace.extractors.base import SourceFile
 
 #: The ``extraction_stats`` key the probe writes, per repo.
 UNRECOGNISED_CALL_FILES_STAT = "call_files_unrecognised"
+
+#: Origins whose code runs at development or build time, never in the deployed
+#: system: a script calling a dev server is no missed service call.
+OUTSIDE_RUNTIME_ORIGINS: frozenset[CodeOrigin] = frozenset({"tooling", "build"})
+
+
+def outside_runtime(rel_path: str) -> bool:
+    """Whether :func:`..code_origin.path_origin` puts *rel_path* outside the running system.
+
+    Read by the probe and by the diagnostics, so both leave out the same files.
+    """
+    return path_origin(rel_path) in OUTSIDE_RUNTIME_ORIGINS
 
 
 @dataclass(frozen=True)
@@ -159,6 +172,8 @@ def count_unrecognised_call_files(
 ) -> int:
     """Files in *files* with a network-call token and no consumer contract.
 
+    Tooling and build files (:func:`outside_runtime`) are not counted.
+
     *consumer_files* are the paths a consumer contract came from. One regex
     search per remaining file of a probed language; only a hit pays for the
     comment mask that confirms it.
@@ -167,7 +182,7 @@ def count_unrecognised_call_files(
     count = 0
     for rel_path, suffix, content in files:
         entry = table.get(suffix)
-        if entry is None or rel_path in consumer_files:
+        if entry is None or rel_path in consumer_files or outside_runtime(rel_path):
             continue
         pattern, hash_comments = entry
         if not pattern.search(content):

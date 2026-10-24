@@ -31,7 +31,7 @@ from repowise.core.workspace.contracts import (
 )
 from repowise.core.workspace.extractors.from_index import EXTRACTION_LAYER_KEY, LAYER_REGEX
 from repowise.core.workspace.matching.common import shared_idl
-from repowise.core.workspace.network_probe import UNRECOGNISED_CALL_FILES_STAT
+from repowise.core.workspace.network_probe import UNRECOGNISED_CALL_FILES_STAT, outside_runtime
 from repowise.core.workspace.signature_schema import SCHEMA_SOURCE
 
 # ---------------------------------------------------------------------------
@@ -558,6 +558,8 @@ def build_diagnostics(
     contract. Omitting it costs the coverage figures, not the rest.
     """
     stats_by_repo = extraction_stats or {}
+    matched_consumers, matched_providers, weak_links = _matched_endpoints(links)
+    contracts = _runtime_contracts(contracts, matched_consumers)
     # A vendored proto copy is counted with its repo's rows, never as an orphan.
     vendored = shared_idl(contracts)
     providers = [c for c in contracts if c.role == "provider" and id(c) not in vendored]
@@ -599,17 +601,6 @@ def build_diagnostics(
                 ),
             )
         )
-
-    # Matched endpoint sets (normalized) ------------------------------------
-    matched_consumers: set[tuple[str, str, str]] = set()
-    matched_providers: set[tuple[str, str, str]] = set()
-    weak_links = 0
-    for lk in links:
-        consumer_id = lk.consumer_contract_id or lk.contract_id
-        matched_consumers.add(_contract_key(lk.consumer_repo, lk.consumer_file, consumer_id))
-        matched_providers.add(_contract_key(lk.provider_repo, lk.provider_file, lk.contract_id))
-        if lk.confidence <= WEAK_LINK_CONFIDENCE_THRESHOLD:
-            weak_links += 1
 
     providers_by_norm_id: dict[str, list[Contract]] = defaultdict(list)
     for p in providers:
@@ -699,6 +690,43 @@ def build_diagnostics(
             and _contract_key(c.repo, c.file_path, c.contract_id) in matched_consumers
         ),
     )
+
+
+def _matched_endpoints(
+    links: list[ContractLink],
+) -> tuple[set[tuple[str, str, str]], set[tuple[str, str, str]], int]:
+    """Normalized (consumer, provider) endpoint keys the links reach, and the weak count."""
+    consumers: set[tuple[str, str, str]] = set()
+    providers: set[tuple[str, str, str]] = set()
+    weak = 0
+    for lk in links:
+        consumer_id = lk.consumer_contract_id or lk.contract_id
+        consumers.add(_contract_key(lk.consumer_repo, lk.consumer_file, consumer_id))
+        providers.add(_contract_key(lk.provider_repo, lk.provider_file, lk.contract_id))
+        if lk.confidence <= WEAK_LINK_CONFIDENCE_THRESHOLD:
+            weak += 1
+    return consumers, providers, weak
+
+
+def _runtime_contracts(
+    contracts: list[Contract], matched_consumers: set[tuple[str, str, str]]
+) -> list[Contract]:
+    """*contracts* less the unlinked consumers in tooling and build files.
+
+    A script polling a dev server is not a call of the running system, so it is
+    left out of every count here, as the network probe leaves those files out
+    of its own. One that linked stays: the link shows it reaches a service.
+    Ceiling: the origin is path-only, so a product folder named ``tools/`` or
+    ``scripts/`` reads as tooling too; a classifier that reads the package
+    layout would narrow it, and it belongs in ``code_origin`` when it comes.
+    """
+    return [
+        c
+        for c in contracts
+        if c.role != "consumer"
+        or _contract_key(c.repo, c.file_path, c.contract_id) in matched_consumers
+        or not outside_runtime(c.file_path)
+    ]
 
 
 def _unmatched_consumers(

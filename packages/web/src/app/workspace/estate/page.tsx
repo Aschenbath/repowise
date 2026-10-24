@@ -67,6 +67,10 @@ function short(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 12) : "";
 }
 
+function indexStateLabel(t: Translator, state: "behind" | "unreadable"): string {
+  return state === "behind" ? t("indexBehind") : t("indexUnreadable");
+}
+
 function shownOf(t: Translator, shown: number, total: number): string | undefined {
   return total > shown ? t("shownOf", { shown, total }) : undefined;
 }
@@ -104,7 +108,8 @@ export default async function EstatePage() {
   const noGraph = missingGraph(report);
   const evidence = graphEvidence(report);
   const repos = report.repos ?? [];
-  const indexed = repos.filter((r) => r.indexed ?? true).length;
+  const indexed = repos.filter((r) => (r.indexed ?? true) && !r.index_state).length;
+  const behindIndex = repos.filter((r) => r.index_state === "behind").length;
   const repositories = checkData<EstateRepositoryRow[]>(
     findCheck(report, "estate-summary", "repositories"),
     "repositories",
@@ -172,6 +177,11 @@ export default async function EstatePage() {
           {t(evidence.state === "partial" ? "evidencePartialSentence" : "evidenceInsufficientSentence", {
             reason: evidence.summary,
           })}
+        </Callout>
+      ) : null}
+      {behindIndex > 0 ? (
+        <Callout tone="warning" label={t("indexBehindLabel")}>
+          {t("indexBehindSentence", { count: behindIndex })}
         </Callout>
       ) : null}
       {stale > 0 ? (
@@ -315,7 +325,13 @@ function RepositoriesTable({ rows, t }: { rows: EstateRepositoryRow[]; t: Transl
           key: r.alias,
           cells: [
             <span key="r" className="font-medium text-[var(--color-text-primary)]">{r.alias}</span>,
-            r.indexed ? <span key="i" className={mono}>{short(r.indexed_commit)}</span> : <span key="i" className={quiet}>{t("notIndexed")}</span>,
+            r.index_state ? (
+              <span key="i" className="text-[var(--color-warning)]">{indexStateLabel(t, r.index_state)}</span>
+            ) : r.indexed ? (
+              <span key="i" className={mono}>{short(r.indexed_commit)}</span>
+            ) : (
+              <span key="i" className={quiet}>{t("notIndexed")}</span>
+            ),
             r.contracts_commit ? (
               <span key="c" className={mono}>
                 {short(r.contracts_commit)}
@@ -472,7 +488,9 @@ function HealthTable({ rows, t }: { rows: EstateRepoRow[]; t: Translator }) {
             h ? (
               <HealthMark key="h" score={h.average_health} t={t} />
             ) : (
-              <span key="h" className={quiet}>{r.indexed ? t("noSnapshot") : t("notIndexed")}</span>
+              <span key="h" className={quiet}>
+                {r.indexState ? indexStateLabel(t, r.indexState) : r.indexed ? t("noSnapshot") : t("notIndexed")}
+              </span>
             ),
             fixed(h?.maintainability_average),
             fixed(h?.hotspot_health),

@@ -16,31 +16,46 @@ from typing import Any
 from repowise.core.report.build import assemble, available_sections, collect_repo, collect_workspace
 from repowise.core.report.model import ReportContext, Section, WorkspaceReportContext
 
+#: A member whose index exists but was not read: ``behind`` when the store
+#: lacks a table or column this version reads even after the reconcile
+#: ``init_db`` runs, ``unreadable`` when opening it raised a storage error or
+#: it holds no repository row. ``indexed: False`` is kept for no index at all.
+INDEX_STATES = ("behind", "unreadable")
+
 
 async def _member(
     alias: str, root: Path, sections: Sequence[tuple[str, Section]]
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """``(repos entry, repo-scope sections)`` for one member; unindexed when its
-    index is absent, unreadable or holds no repository row."""
+    """``(repos entry, repo-scope sections)`` for one member.
+
+    Storage errors become the member's ``index_state``; any other error
+    propagates, so a defect is never reported as a missing index.
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from repowise.core.persistence.database import schema_behind
     from repowise.core.workspace.registry import open_repo_db, repo_db_path
     from repowise.core.workspace.repo_index import checkout_repository
 
-    unindexed = ({"alias": alias, "name": root.name, "indexed": False}, [])
+    entry: dict[str, Any] = {"alias": alias, "name": root.name}
     if not repo_db_path(root).is_file():
-        return unindexed
+        return {**entry, "indexed": False}, []
+    unreadable = ({**entry, "index_state": "unreadable"}, [])
     try:
         engine, sessions = await open_repo_db(root)
-    except Exception:  # one unreadable index must not lose the rest
-        return unindexed
+    except (SQLAlchemyError, OSError):
+        return unreadable
     try:
+        if await schema_behind(engine):
+            return {**entry, "index_state": "behind"}, []
         async with sessions() as session:
             repo = await checkout_repository(session, root)
             if repo is None:
-                return unindexed
+                return unreadable
             ctx = ReportContext(session, repo.id, root, alias=alias, head_commit=repo.head_commit)
             return await collect_repo(ctx, list(sections))
-    except Exception:
-        return unindexed
+    except (SQLAlchemyError, OSError):
+        return unreadable
     finally:
         await engine.dispose()
 
@@ -63,4 +78,4 @@ async def build_estate_document(
     return document
 
 
-__all__ = ["build_estate_document"]
+__all__ = ["INDEX_STATES", "build_estate_document"]

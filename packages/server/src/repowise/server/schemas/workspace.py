@@ -716,8 +716,11 @@ class WorkspaceEstateRepo(BaseModel):
     name: str
     head_commit: str | None = None
     last_snapshot: WorkspaceEstateSnapshot | None = None
-    #: ``False`` when the member has no readable index.
+    #: ``False`` when the member has no index at all.
     indexed: bool = True
+    #: Set when an index exists but was not read: ``behind`` (written by an
+    #: older repowise; run ``repowise update``) or ``unreadable``.
+    index_state: Literal["behind", "unreadable"] | None = None
 
 
 class WorkspaceEstateGenerator(BaseModel):

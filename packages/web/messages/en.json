@@ -1613,6 +1613,10 @@
     }
   },
   "estate": {
+    "indexBehind": "index behind, run repowise update",
+    "indexUnreadable": "index could not be read",
+    "indexBehindLabel": "Index behind",
+    "indexBehindSentence": "{count, plural, one {# repo has an index written by an older repowise, so it was not read} other {# repos have an index written by an older repowise, so they were not read}}. Run repowise update in each to bring it up to date.",
     "title": "Estate report",
     "description": "One read across every repository in the workspace: the system map and the evidence behind it, contracts and the calls that reached no provider, health and churn per repo, the riskiest seams and where to start.",
     "unavailableTitle": "Estate report unavailable",

@@ -45,6 +45,7 @@ export function graphEvidence(report: EstateReport): GraphEvidence | null {
 export interface EstateRepoRow {
   repo: string;
   indexed: boolean;
+  indexState: "behind" | "unreadable" | null;
   health: EstateHealthRow | null;
   /** Null when the repo's history was not measured (too short, unread, not indexed). */
   churn: EstateHistoryRow | null;
@@ -76,6 +77,7 @@ export function repoRows(report: EstateReport): EstateRepoRow[] {
   const aliases = (report.repos ?? []).map((r) => ({
     repo: r.alias ?? r.name,
     indexed: r.indexed ?? true,
+    indexState: r.index_state ?? null,
   }));
   const rank = (repo: string) => {
     const i = health.findIndex((h) => h.repo === repo);
@@ -84,9 +86,10 @@ export function repoRows(report: EstateReport): EstateRepoRow[] {
   return aliases
     .map((a, order) => ({ ...a, order }))
     .sort((a, b) => rank(a.repo) - rank(b.repo) || a.order - b.order)
-    .map(({ repo, indexed }) => ({
+    .map(({ repo, indexed, indexState }) => ({
       repo,
       indexed,
+      indexState,
       health: byRepo.get(repo) ?? null,
       churn: churn[repo] ?? null,
       magnets: magnets[repo] ?? null,

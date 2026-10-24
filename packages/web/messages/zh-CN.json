@@ -1613,6 +1613,10 @@
     }
   },
   "estate": {
+    "indexBehind": "索引已过旧，请运行 repowise update",
+    "indexUnreadable": "索引无法读取",
+    "indexBehindLabel": "索引过旧",
+    "indexBehindSentence": "{count, plural, other {# 个仓库的索引由旧版 repowise 生成，因此未被读取}}。请在每个仓库中运行 repowise update 进行更新。",
     "title": "全局报告",
     "description": "一次读完工作区内的每个仓库：系统地图及其依据、契约与未找到提供方的调用、各仓库的健康度与变更热度、风险最高的服务接缝，以及从哪里入手。",
     "unavailableTitle": "全局报告不可用",

@@ -23,6 +23,8 @@ export interface EstateRepositoryRow {
   /** The commit contracts were last read at; differs from `indexed_commit` when stale. */
   contracts_commit: string | null;
   services: string[];
+  /** Set when an index exists but was not read: written by an older repowise, or unreadable. */
+  index_state?: "behind" | "unreadable" | null;
 }
 
 /** `estate-health` / `health`: `data.repositories`, lowest health first. */

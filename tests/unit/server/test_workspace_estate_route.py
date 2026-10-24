@@ -100,7 +100,12 @@ async def test_estate_route_serves_the_document_the_cli_builds(tmp_path, monkeyp
     web, api = served["repos"]
     assert web["alias"] == "web" and web["head_commit"] == "a" * 40 and web["indexed"] is True
     assert api == {
-        "alias": "api", "name": "api", "head_commit": None, "last_snapshot": None, "indexed": False
+        "alias": "api",
+        "name": "api",
+        "head_commit": None,
+        "last_snapshot": None,
+        "indexed": False,
+        "index_state": None,
     }
     summary = {c["name"]: c for c in served["sections"][0]["checks"]}
     rows = {r["alias"]: r for r in summary["repositories"]["data"]["repositories"]}
@@ -123,3 +128,52 @@ async def test_without_a_system_graph_the_graph_sections_are_inconclusive(tmp_pa
 async def test_estate_route_outside_a_workspace_is_404():
     resp = await _get(_app(None))
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_member_index_behind_this_version_is_named_not_called_unindexed(
+    tmp_path, monkeypatch
+):
+    import repowise.core.persistence.database as database
+    from repowise.core.report.render import report_renderers
+
+    monkeypatch.delenv("REPOWISE_DB_URL", raising=False)
+    root = await _workspace(tmp_path.resolve())
+
+    async def behind(engine):
+        return True
+
+    monkeypatch.setattr(database, "schema_behind", behind)
+    resp = await _get(_app(root))
+    assert resp.status_code == 200, resp.text
+    doc = resp.json()
+    web, api = doc["repos"]
+    assert web["indexed"] is True and web["index_state"] == "behind" and web["head_commit"] is None
+    assert api["indexed"] is False and api["index_state"] is None
+    summary = {c["name"]: c for c in doc["sections"][0]["checks"]}["repositories"]
+    assert any("older repowise" in d and "web" in d for d in summary["details"])
+    assert not any("not indexed" in d and "web" in d for d in summary["details"])
+    assert "index behind this version" in report_renderers.get("markdown")(doc)
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_member_index_is_named_and_other_errors_propagate(
+    tmp_path, monkeypatch
+):
+    import repowise.core.workspace.repo_index as repo_index
+
+    monkeypatch.delenv("REPOWISE_DB_URL", raising=False)
+    root = await _workspace(tmp_path.resolve())
+    (root / "api" / ".repowise").mkdir()
+    (root / "api" / ".repowise" / "wiki.db").write_bytes(b"not a sqlite database" * 64)
+    doc = await build_estate_document(root)
+    web, api = doc["repos"]
+    assert web["head_commit"] == "a" * 40
+    assert api == {"alias": "api", "name": "api", "index_state": "unreadable"}
+
+    async def broken(session, path):
+        raise RuntimeError("a defect, not a missing index")
+
+    monkeypatch.setattr(repo_index, "checkout_repository", broken)
+    with pytest.raises(RuntimeError):
+        await build_estate_document(root)

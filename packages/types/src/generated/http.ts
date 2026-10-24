@@ -4687,6 +4687,7 @@ export interface WorkspaceEstateRepo {
   head_commit?: string | null;
   last_snapshot?: WorkspaceEstateSnapshot | null;
   indexed?: boolean;
+  index_state?: "behind" | "unreadable" | null;
 }
 
 /** ``GET /api/workspace/estate``: the estate report document. */

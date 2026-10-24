@@ -77,6 +77,8 @@ CONTRACTS_FILENAME = "contracts.json"
 # Go routes from chi, fiber, gorilla/mux and Go 1.22 method patterns are read.
 # Next.js route handlers exported from a brace list are read, and the probe
 # skips tooling and build files.
+# A data consumer in a file that opens SQLite carries ``meta['embedded']`` and
+# links only within its repo.
 CONTRACTS_VERSION = 15
 
 #: ``meta["kind"]`` of a topic contract: the destination a broker call names.

@@ -261,6 +261,15 @@ class WorkspaceSystemNode(BaseModel):
     is_orphan_provider: bool = False
     is_orphan_consumer: bool = False
     is_isolated: bool = False
+    #: Id of the service group this node belongs to; None when ungrouped.
+    group: str | None = None
+
+
+class WorkspaceServiceGroup(BaseModel):
+    id: str
+    label: str
+    source: str  # tag | name | linked
+    member_count: int = 0
 
 
 class WorkspaceSystemEdge(BaseModel):
@@ -419,6 +428,8 @@ class WorkspaceSystemGraphResponse(BaseModel):
     nodes: list[WorkspaceSystemNode] = []
     edges: list[WorkspaceSystemEdge] = []
     diagnostics: WorkspaceExtractionDiagnostics = WorkspaceExtractionDiagnostics()
+    #: Service groups; empty when the estate is too small to group.
+    groups: list[WorkspaceServiceGroup] = []
 
 
 # ---------------------------------------------------------------------------

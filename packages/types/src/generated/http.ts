@@ -4845,6 +4845,13 @@ export interface WorkspaceSchemaCoverage {
   recovered_ratio_eligible?: number | null;
 }
 
+export interface WorkspaceServiceGroup {
+  id: string;
+  label: string;
+  source: string;
+  member_count?: number;
+}
+
 export interface WorkspaceSymbolIdentity {
   total?: number;
   bound?: number;
@@ -4887,6 +4894,7 @@ export interface WorkspaceSystemGraphResponse {
   nodes?: WorkspaceSystemNode[];
   edges?: WorkspaceSystemEdge[];
   diagnostics?: WorkspaceExtractionDiagnostics;
+  groups?: WorkspaceServiceGroup[];
 }
 
 export interface WorkspaceSystemNode {
@@ -4901,6 +4909,7 @@ export interface WorkspaceSystemNode {
   is_orphan_provider?: boolean;
   is_orphan_consumer?: boolean;
   is_isolated?: boolean;
+  group?: string | null;
 }
 
 /** One consumer file the join looked at, and the state it ended in. */

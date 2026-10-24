@@ -198,3 +198,15 @@ class TestSettingStages:
         )
         assert base.analysis_fingerprint() == moved.analysis_fingerprint()
         assert base.analysis_fingerprint() != edited.analysis_fingerprint()
+
+    def test_analysis_fingerprint_follows_declared_tags(self) -> None:
+        import hashlib
+        import json
+
+        base = WorkspaceConfig(repos=[RepoEntry(path="a", alias="a")])
+        tagged = WorkspaceConfig(repos=[RepoEntry(path="a", alias="a", tags=["group:core"])])
+        # An untagged workspace hashes the same payload as before tags counted.
+        old = [base.contracts.to_dict(), base.conformance.to_dict()]
+        expected = hashlib.sha256(json.dumps(old, sort_keys=True).encode()).hexdigest()[:16]
+        assert base.analysis_fingerprint() == expected
+        assert base.analysis_fingerprint() != tagged.analysis_fingerprint()

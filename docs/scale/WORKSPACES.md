@@ -319,6 +319,8 @@ The contracts, package dependencies, and co-changes above are each a flat list. 
 
 Edge direction is uniform: **`source` depends on / calls `target`.** A consumer points to the provider it calls; a dependent repo points to the repo it imports. Structural edges (contracts, package deps) are flagged distinctly from behavioral co-change edges, repowise never conflates "these change together" with "these call each other".
 
+**Large estates are grouped into systems.** Past 40 services, each service joins at most one group, recorded as `group` on the node and summarised in a top-level `groups` list (`id`, `label`, `source`, `member_count`). Groups come from, in order: a repo tag (`tags: [group:checkout]` wins, else the repo's first tag), a shared alias prefix across 2+ repos and under half the estate (`ordering.api`, `ordering.worker`), then seeded community detection over runtime and data edges. A group needs 2+ services, and groups are written only when at least two form; smaller estates carry no `group` or `groups` keys.
+
 Fetch it over REST with `GET /api/workspace/system-graph`, or explore it visually in the [Live System Map](#live-system-map).
 
 ## Extraction Diagnostics

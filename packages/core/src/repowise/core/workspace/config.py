@@ -52,6 +52,8 @@ class RepoEntry:
     # Free-form labels (e.g. "frontend", "tier:edge", "legacy") that group repos
     # for architecture conformance rules. A rule like ``frontend !-> db`` matches
     # by tag via ``tag:<name>``; every service node in this repo inherits these.
+    # On a large estate a ``group:<name>`` tag (else the first tag) also names
+    # the system the repo's services are grouped under (see ``grouping.py``).
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -315,9 +317,13 @@ class WorkspaceConfig:
         """Hash of the settings the cross-repo analysis reads.
 
         Compared with the one the last analysis run stamped, so editing the
-        ``contracts:`` or ``conformance:`` block re-runs it with no repo changed.
+        ``contracts:`` or ``conformance:`` block, or a repo's ``tags:`` (read by
+        conformance and service grouping), re-runs it with no repo changed.
         """
-        payload = [self.contracts.to_dict(), self.conformance.to_dict()]
+        payload: list[Any] = [self.contracts.to_dict(), self.conformance.to_dict()]
+        tags = {r.alias: r.tags for r in self.repos if r.tags}
+        if tags:  # only when declared, so an untagged workspace keeps its stamp
+            payload.append(tags)
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
     def save(self, workspace_root: Path) -> Path:

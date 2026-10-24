@@ -53,6 +53,7 @@ from repowise.core.workspace.extractors.service_boundary import (
     assign_service,
     detect_service_boundaries,
 )
+from repowise.core.workspace.grouping import ServiceGroup, group_services
 from repowise.core.workspace.origins import LinkStrategy, legacy_strategy
 
 _log = logging.getLogger("repowise.workspace.system_graph")
@@ -131,9 +132,12 @@ class SystemNode:
     is_orphan_provider: bool = False  # exposes providers nobody consumes
     is_orphan_consumer: bool = False  # consumes contracts that never matched
     is_isolated: bool = False  # participates in no edges
+    #: Id of the :class:`.grouping.ServiceGroup` this service belongs to; None
+    #: when ungrouped, which every node is on an estate too small to group.
+    group: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "id": self.id,
             "repo": self.repo,
             "service_path": self.service_path,
@@ -146,6 +150,9 @@ class SystemNode:
             "is_orphan_consumer": self.is_orphan_consumer,
             "is_isolated": self.is_isolated,
         }
+        if self.group is not None:
+            data["group"] = self.group
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SystemNode:
@@ -161,6 +168,7 @@ class SystemNode:
             is_orphan_provider=data.get("is_orphan_provider", False),
             is_orphan_consumer=data.get("is_orphan_consumer", False),
             is_isolated=data.get("is_isolated", False),
+            group=data.get("group"),
         )
 
 
@@ -227,9 +235,11 @@ class SystemGraph:
     edges: list[SystemEdge] = field(default_factory=list)
     diagnostics: ExtractionDiagnostics = field(default_factory=ExtractionDiagnostics)
     repo_provenance: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: Service groups (see :mod:`.grouping`); empty on an estate too small to group.
+    groups: list[ServiceGroup] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "version": self.version,
             "generated_at": self.generated_at,
             "repo_provenance": self.repo_provenance,
@@ -237,6 +247,9 @@ class SystemGraph:
             "edges": [e.to_dict() for e in self.edges],
             "diagnostics": self.diagnostics.to_dict(),
         }
+        if self.groups:
+            data["groups"] = [g.to_dict() for g in self.groups]
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SystemGraph:
@@ -247,6 +260,7 @@ class SystemGraph:
             nodes=[SystemNode.from_dict(n) for n in data.get("nodes", [])],
             edges=[SystemEdge.from_dict(e) for e in data.get("edges", [])],
             diagnostics=ExtractionDiagnostics.from_dict(data.get("diagnostics", {})),
+            groups=[ServiceGroup.from_dict(g) for g in data.get("groups", [])],
         )
 
     def adjacency(
@@ -422,6 +436,7 @@ def build_system_graph(
     generated_at: str = "",
     repo_provenance: dict[str, dict[str, str]] | None = None,
     service_links: list[ContractLink] | None = None,
+    repo_tags: dict[str, list[str]] | None = None,
 ) -> SystemGraph:
     """Assemble the service-granular system graph (pure, no I/O).
 
@@ -429,7 +444,8 @@ def build_system_graph(
     contract links (consumer→provider), service-level links (a consumer to the
     repo its host names, no route known; :attr:`.origins.LinkStrategy.HOST_ONLY`),
     package dependencies (dependent→dependency), and cross-repo co-changes
-    (undirected, behavioral).
+    (undirected, behavioral). Services are then grouped (:mod:`.grouping`),
+    reading declared groups from *repo_tags* (repo alias to its tags).
     """
     if diagnostics is None:
         diagnostics = build_diagnostics(contracts, links)
@@ -487,6 +503,9 @@ def build_system_graph(
         )
 
     nodes, edges = builder.finalize(diagnostics)
+    assignment, groups = group_services(nodes, edges, repo_tags)
+    for node in nodes:
+        node.group = assignment.get(node.id)
     return SystemGraph(
         version=version,
         generated_at=generated_at,
@@ -494,6 +513,7 @@ def build_system_graph(
         nodes=nodes,
         edges=edges,
         diagnostics=diagnostics,
+        groups=groups,
     )
 
 
@@ -573,6 +593,7 @@ async def run_system_graph_build(
         generated_at=datetime.now(UTC).isoformat(),
         repo_provenance=store.repo_provenance,
         service_links=store.service_links,
+        repo_tags={entry.alias: entry.tags for entry in ws_config.repos},
     )
 
     out_path = save_system_graph(graph, workspace_root)

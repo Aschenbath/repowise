@@ -174,6 +174,24 @@ export interface SystemNode {
   is_orphan_consumer: boolean;
   /** Participates in no edges. */
   is_isolated: boolean;
+  /** Id of the `ServiceGroup` this service belongs to; absent or null when ungrouped. */
+  group?: string | null;
+}
+
+/** Where a service group came from: a declared repo tag, a shared alias prefix, or linkage. */
+export type ServiceGroupSource = "tag" | "name" | "linked";
+
+/**
+ * A group of services the map can draw as one card. Mirrors
+ * `repowise.core.workspace.grouping.ServiceGroup`. Groups exist only on estates
+ * over 40 services where two or more groups of 2+ services form.
+ */
+export interface ServiceGroup {
+  /** Stable id, `"<source>:<key>"`. */
+  id: string;
+  label: string;
+  source: ServiceGroupSource;
+  member_count: number;
 }
 
 /** A typed, directed relationship between two services (`source` → `target`). */
@@ -200,6 +218,8 @@ export interface SystemGraph {
   nodes: SystemNode[];
   edges: SystemEdge[];
   diagnostics: ExtractionDiagnostics;
+  /** Service groups; absent or empty when the estate is too small to group. */
+  groups?: ServiceGroup[];
 }
 
 // ---------------------------------------------------------------------------

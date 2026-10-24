@@ -1202,6 +1202,46 @@ class TestGetSystemGraph:
         kinds = {(e["source"], e["target"], e["kind"]) for e in data["edges"]}
         assert ("frontend", "backend", "http") in kinds  # consumer -> provider
         assert ("frontend", "backend", "package") in kinds  # dependent -> dependency
+        assert data["groups"] == []  # two services: too few to group
+        assert {n["group"] for n in data["nodes"]} == {None}
+
+    @pytest.mark.asyncio
+    async def test_returns_service_groups(self, tmp_path: Path) -> None:
+        from repowise.core.workspace.contracts import Contract
+        from repowise.core.workspace.cross_repo import CrossRepoOverlay
+        from repowise.core.workspace.system_graph import build_system_graph
+
+        repos = [f"{fam}-{i}" for fam in ("billing", "search", "misc") for i in range(15)]
+        contracts = [
+            Contract(
+                repo=r,
+                contract_id=f"http::GET::/{r}",
+                contract_type="http",
+                role="provider",
+                file_path="h.py",
+                symbol_name="h",
+                confidence=0.9,
+            )
+            for r in repos
+        ]
+        graph = build_system_graph(contracts, [], CrossRepoOverlay(), {})
+        _write_json(tmp_path / "system_graph.json", graph.to_dict())
+        enricher = CrossRepoEnricher(
+            tmp_path / "cross_repo_edges.json", system_graph_path=tmp_path / "system_graph.json"
+        )
+        app = _make_workspace_app(ws_config=_make_ws_config(), enricher=enricher)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            data = (await c.get("/api/workspace/system-graph")).json()
+        assert [g["id"] for g in data["groups"]] == ["name:billing", "name:misc", "name:search"]
+        assert data["groups"][0] == {
+            "id": "name:billing",
+            "label": "billing",
+            "source": "name",
+            "member_count": 15,
+        }
+        assert {n["group"] for n in data["nodes"] if n["repo"].startswith("search")} == {
+            "name:search"
+        }
 
 
 class TestGetBlastRadius:

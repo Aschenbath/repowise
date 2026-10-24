@@ -331,6 +331,7 @@ class TestNextAppRecognition:
         assert next_route_verbs("export { GET as handler };\n") == []
         assert next_route_verbs("export const { GET: get } = h;\n") == []
         assert next_route_verbs("export type { GET };\n") == []
+        assert [v for v, _ in next_route_verbs('export { type GET, POST } from "./h";\n')] == ["POST"]
         assert next_route_verbs("// export const { GET } = h;\n") == []
 
 

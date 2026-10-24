@@ -1199,8 +1199,11 @@ _NEXT_HANDLER_LIST_RE = re.compile(
     re.MULTILINE,
 )
 # A verb the list binds under its own name. One followed by `:` is a key the
-# destructuring renames, one followed by `as` is exported under another name.
-_NEXT_LISTED_VERB_RE = re.compile(rf"(?<![\w$.])(?P<name>{_NEXT_VERBS})\b(?!\s*(?::|as\b))")
+# destructuring renames, one followed by `as` is exported under another name,
+# and one after an inline `type` modifier exports only a type.
+_NEXT_LISTED_VERB_RE = re.compile(
+    rf"(?<![\w$.])(?P<type>type\s+)?(?P<name>{_NEXT_VERBS})\b(?!\s*(?::|as\b))"
+)
 
 
 def next_app_router_file(rel_path: str) -> bool:
@@ -1240,7 +1243,7 @@ def next_route_verbs(content: str) -> list[tuple[str, int]]:
     found = _exported_names(content, _NEXT_HANDLER_RE)
     for m in _NEXT_HANDLER_LIST_RE.finditer(content):
         listed = _NEXT_LISTED_VERB_RE.finditer(m.group("body"))
-        found += [(v.group("name"), m.start("export")) for v in listed]
+        found += [(v.group("name"), m.start("export")) for v in listed if not v.group("type")]
     seen: set[str] = set()
     out: list[tuple[str, int]] = []
     for verb, offset in sorted(found, key=lambda pair: pair[1]):

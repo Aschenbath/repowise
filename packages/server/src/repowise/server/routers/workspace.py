@@ -34,6 +34,7 @@ from repowise.server.schemas import (
     WorkspaceContractsResponse,
     WorkspaceContractSummary,
     WorkspaceCrossRepoSummary,
+    WorkspaceEstateResponse,
     WorkspaceExtractionDiagnostics,
     WorkspaceGraphEdge,
     WorkspaceGraphNode,
@@ -838,6 +839,32 @@ async def get_architecture(
         generated_at=raw.get("generated_at", ""),
     )
     return WorkspaceArchitectureResponse(**metrics.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# GET /api/workspace/estate
+# ---------------------------------------------------------------------------
+
+
+@router.get("/estate", response_model=WorkspaceEstateResponse)
+async def get_estate(
+    request: Request,
+    ws_config=Depends(get_workspace_config),
+) -> WorkspaceEstateResponse:
+    """The estate report ``repowise report estate --format json`` prints.
+
+    Built on request by the same core function the CLI calls, from the stored
+    workspace artifacts and each member's index; nothing is extracted again.
+    Opens every member index, so it costs about 0.1 to 0.3 s per repo once the
+    server is warm. Without a stored system graph the graph sections come back
+    inconclusive and say which command builds it.
+    """
+    _require_workspace(ws_config)
+
+    from repowise.core.report.estate import build_estate_document
+
+    ws_root = Path(request.app.state.workspace_root)
+    return WorkspaceEstateResponse(**await build_estate_document(ws_root))
 
 
 # ---------------------------------------------------------------------------

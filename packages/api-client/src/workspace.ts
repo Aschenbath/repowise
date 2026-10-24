@@ -13,6 +13,7 @@ import type {
   WorkspaceBreakingChangesResponse,
   WorkspaceConformanceResponse,
   WorkspaceArchitectureResponse,
+  WorkspaceEstateResponse,
   WorkspaceTestImpactResponse,
   ExtractionDiagnostics,
 } from "./types";
@@ -171,6 +172,18 @@ export async function getWorkspaceConformance(opts?: {
 
 export async function getWorkspaceArchitecture(): Promise<WorkspaceArchitectureResponse> {
   return apiGet<WorkspaceArchitectureResponse>("/api/workspace/architecture");
+}
+
+/**
+ * The estate report: repositories and services, the system map and its
+ * evidence, contracts and dangling calls, health and churn per repo, the
+ * riskiest seams and where to start. Built on request from the stored
+ * workspace artifacts and every member index, so it takes about a second.
+ */
+export async function getWorkspaceEstate(
+  fetchOptions?: RequestInit,
+): Promise<WorkspaceEstateResponse> {
+  return apiGet<WorkspaceEstateResponse>("/api/workspace/estate", undefined, fetchOptions);
 }
 
 /**

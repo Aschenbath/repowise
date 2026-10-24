@@ -1560,6 +1560,9 @@ repowise report estate --format html --out estate.html
 Outside a workspace it exits 1. A section is a `Section(scope="workspace", report="estate")` in
 `repowise/core/report/sections/`; it runs once with a `WorkspaceReportContext`.
 
+The local server returns the same document as JSON at `GET /api/workspace/estate`, and the web UI
+shows it on the workspace **Estate report** page. Both call `report/estate.py::build_estate_document`.
+
 ---
 
 ### `repowise distill <command>`

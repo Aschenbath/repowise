@@ -96,6 +96,13 @@ def test_declared_group_tag_wins_over_first_tag_and_name():
     }
 
 
+def test_declared_name_ignores_an_empty_group_tag():
+    assert grouping._declared_name(["group:", " web "]) == "web"
+    assert grouping._declared_name(["group:"]) is None
+    assert grouping._declared_name(["edge", "Group: Checkout"]) == "Checkout"
+    assert grouping._declared_name([]) is None
+
+
 def test_lone_tag_falls_through_to_name_family():
     nodes = _family("ordering", 3) + _family("catalog", 3) + _filler(40)
     assignment, _ = group_services(nodes, [], {"ordering-svc0": ["group:solo"]})

@@ -105,12 +105,18 @@ class ServiceGroup:
 
 
 def _declared_name(tags: Iterable[str]) -> str | None:
-    """The repo's declared group: a ``group:<name>`` tag, else its first tag."""
-    tags = [t.strip() for t in tags if t and t.strip()]
-    for tag in tags:
-        if tag.startswith(_GROUP_TAG_PREFIX) and tag[len(_GROUP_TAG_PREFIX) :].strip():
-            return tag[len(_GROUP_TAG_PREFIX) :].strip()
-    return tags[0] if tags else None
+    """The repo's declared group: a ``group:<name>`` tag, else its first other tag.
+
+    Names keep their case, as conformance's ``tag:<name>`` matcher does.
+    """
+    plain: list[str] = []
+    for tag in (t.strip() for t in tags if t):
+        if tag.lower().startswith(_GROUP_TAG_PREFIX):
+            if name := tag[len(_GROUP_TAG_PREFIX) :].strip():
+                return name
+        elif tag:
+            plain.append(tag)
+    return plain[0] if plain else None
 
 
 def _by_tag(
@@ -171,7 +177,8 @@ def _by_linkage(
     Louvain because it needs no target group count, is near-linear, ships with
     networkx (a core dependency, unlike Leiden's graspologic, which would make
     the result depend on what is installed), and is deterministic under a fixed
-    seed and a fixed insertion order.
+    seed and a fixed insertion order. A networkx upgrade may still move a
+    borderline service between linked groups; tag and name groups never move.
     """
     by_id = {n.id: n for n in nodes}
     pair_weight: dict[tuple[str, str], int] = {}
@@ -201,14 +208,18 @@ def _by_linkage(
     return [[by_id[nid] for nid in sorted(c)] for c in communities if len(c) >= 2]
 
 
-def _fan_in_anchor(members: list[SystemNode], edges: list[SystemEdge]) -> SystemNode:
-    """The member the most distinct services call (ties: name, then id)."""
-    ids = {m.id for m in members}
-    callers: dict[str, set[str]] = {nid: set() for nid in ids}
+def _fan_in(edges: list[SystemEdge]) -> dict[str, int]:
+    """How many distinct services call each service over :data:`LINKAGE_KINDS`."""
+    callers: dict[str, set[str]] = {}
     for edge in edges:
-        if edge.kind in LINKAGE_KINDS and edge.target in ids and edge.source != edge.target:
-            callers[edge.target].add(edge.source)
-    return min(members, key=lambda m: (-len(callers[m.id]), m.name, m.id))
+        if edge.kind in LINKAGE_KINDS and edge.source != edge.target:
+            callers.setdefault(edge.target, set()).add(edge.source)
+    return {nid: len(sources) for nid, sources in callers.items()}
+
+
+def _fan_in_anchor(members: list[SystemNode], fan_in: Mapping[str, int]) -> SystemNode:
+    """The member the most distinct services call (ties: name, then id)."""
+    return min(members, key=lambda m: (-fan_in.get(m.id, 0), m.name, m.id))
 
 
 # ---------------------------------------------------------------------------
@@ -248,8 +259,10 @@ def group_services(
     taken = {m.id for _, members in claimed for m in members}
     remaining = [n for n in remaining if n.id not in taken]
 
-    for members in _by_linkage(remaining, edges):
-        anchor = _fan_in_anchor(members, edges)
+    linked = _by_linkage(remaining, edges)
+    fan_in = _fan_in(edges) if linked else {}
+    for members in linked:
+        anchor = _fan_in_anchor(members, fan_in)
         claim(f"linked:{anchor.id}", anchor.name, "linked", members)
 
     if len(claimed) < MIN_GROUPS:

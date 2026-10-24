@@ -113,6 +113,7 @@ class CrossRepoEnricher:
         # Contract indexes
         self._contracts: list[dict] = []
         self._contract_links: list[dict] = []
+        self._service_links: list[dict] = []
         self._contract_provider_index: dict[tuple[str, str], list[dict]] = defaultdict(list)
         self._contract_consumer_index: dict[tuple[str, str], list[dict]] = defaultdict(list)
         # Keyed by the ingestion symbol id, so a caller holding a symbol can
@@ -326,6 +327,7 @@ class CrossRepoEnricher:
     def _ingest_contracts(self, data: dict) -> None:
         self._contracts = data.get("contracts", [])
         self._contract_links = data.get("contract_links", [])
+        self._service_links = data.get("service_links", [])
         self._contract_analysis = {
             "status": "available",
             "contract_version": data.get("version", 1),
@@ -458,6 +460,11 @@ class CrossRepoEnricher:
     def contract_links(self) -> list[dict]:
         """Every matched link row, as stored."""
         return self._contract_links
+
+    @property
+    def service_links(self) -> list[dict]:
+        """Service-level link rows: a host named but no route, and gateway routes."""
+        return self._service_links
 
     @property
     def co_changes(self) -> list[dict]:

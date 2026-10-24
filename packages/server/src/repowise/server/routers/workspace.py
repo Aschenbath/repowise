@@ -50,6 +50,7 @@ from repowise.server.schemas.actions import (
     WorkspaceCrossRepoAction,
     WorkspaceRepoActions,
 )
+from repowise.server.schemas.workspace import WorkspaceLinksBetweenResponse
 from repowise.server.services.module_health import read_repo_health_score
 
 router = APIRouter(
@@ -596,6 +597,57 @@ async def get_blast_radius(
         graph, target, max_depth=max_depth, include_behavioral=include_behavioral
     )
     return WorkspaceBlastRadiusResponse(**result.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# GET /api/workspace/system-graph/links
+# ---------------------------------------------------------------------------
+
+
+@router.get("/system-graph/links", response_model=WorkspaceLinksBetweenResponse)
+async def get_links_between(
+    ws_config=Depends(get_workspace_config),
+    enricher=Depends(get_cross_repo_enricher),
+    a: str = Query(..., description="A service node id ('repo' or 'repo::service/path')."),
+    b: str = Query(..., description="The other service node id."),
+    kind: str | None = Query(None, description="One edge kind: http, grpc, event, db..."),
+    q: str | None = Query(
+        None,
+        description="Every whitespace-separated term must match the link's ids, files or symbols.",
+    ),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Every contract link between two services, both directions, paged.
+
+    Each end is resolved to its service the way the system graph was built,
+    so the rows are exactly the links behind the edges drawn between the two.
+    404 when either id is not a node of the graph (or no graph is built).
+    """
+    _require_workspace(ws_config)
+
+    from repowise.core.workspace.links_between import links_between
+
+    graph = enricher.get_system_graph() if enricher is not None else None
+    result = (
+        links_between(
+            graph.get("nodes", []),
+            enricher.contracts,
+            enricher.contract_links,
+            enricher.service_links,
+            a=a,
+            b=b,
+            kind=kind,
+            q=q,
+            limit=limit,
+            offset=offset,
+        )
+        if graph
+        else None
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Service not found in the system graph")
+    return WorkspaceLinksBetweenResponse(**result)
 
 
 # ---------------------------------------------------------------------------

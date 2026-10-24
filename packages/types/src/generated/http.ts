@@ -4748,6 +4748,14 @@ export interface WorkspaceImpactedNode {
   edge_kinds?: string[];
 }
 
+export interface WorkspaceLinksBetweenResponse {
+  a: string;
+  b: string;
+  links: WorkspaceServiceLinkEntry[];
+  total: number;
+  totals: WorkspaceServiceLinksTotal[];
+}
+
 export interface WorkspaceNodeArchitectureRole {
   id: string;
   repo?: string;
@@ -4843,6 +4851,36 @@ export interface WorkspaceSchemaCoverage {
   eligible?: number;
   recovered_ratio?: number | null;
   recovered_ratio_eligible?: number | null;
+}
+
+/** One link between two services, as ``GET /system-graph/links`` pages them. */
+export interface WorkspaceServiceLinkEntry {
+  contract_id: string;
+  contract_type: string;
+  match_type: string;
+  strategy?: string | null;
+  confidence: number;
+  provider_repo: string;
+  provider_file: string;
+  provider_symbol: string;
+  consumer_repo: string;
+  consumer_file: string;
+  consumer_symbol: string;
+  provider_service?: string | null;
+  consumer_service?: string | null;
+  provider_symbol_id?: string | null;
+  consumer_symbol_id?: string | null;
+  consumer_contract_id?: string | null;
+  kind: string;
+  direction: "a_to_b" | "b_to_a";
+  provider_origin?: string | null;
+  consumer_origin?: string | null;
+}
+
+export interface WorkspaceServiceLinksTotal {
+  kind: string;
+  direction: "a_to_b" | "b_to_a";
+  count: number;
 }
 
 export interface WorkspaceSymbolIdentity {

@@ -243,6 +243,10 @@ export type {
   SystemGraph,
   SystemEdgeKind,
   SystemEdgeMatchType,
+  ServiceLinkDirection,
+  ServiceLinkEntry,
+  ServiceLinksTotal,
+  ServiceLinksBetween,
   ExtractionDiagnostics,
   RepoDiagnostics,
   UnmatchedConsumer,
@@ -277,6 +281,7 @@ export type {
 
 import type {
   SystemGraph,
+  ServiceLinksBetween,
   CrossRepoBlastRadius,
   BreakingChangeReport,
   ConformanceReport,
@@ -285,6 +290,9 @@ import type {
 
 /** `GET /api/workspace/system-graph` — the full service-granular system graph. */
 export type WorkspaceSystemGraphResponse = SystemGraph;
+
+/** `GET /api/workspace/system-graph/links` — one page of links between two services. */
+export type WorkspaceLinksBetweenResponse = ServiceLinksBetween;
 
 /** `GET /api/workspace/blast-radius` — cross-repo downstream impact set. */
 export type WorkspaceBlastRadiusResponse = CrossRepoBlastRadius;

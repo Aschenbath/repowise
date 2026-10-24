@@ -111,6 +111,40 @@ export interface WorkspaceContractLinkEntry {
   consumer_contract_id?: string | null;
 }
 
+/** Which way a link between two services runs: `a_to_b` when `a` is the consumer. */
+export type ServiceLinkDirection = "a_to_b" | "b_to_a";
+
+/**
+ * One link between two services, each end resolved to its service the way the
+ * system graph was built. Mirrors `repowise.core.workspace.links_between`.
+ */
+export interface ServiceLinkEntry extends WorkspaceContractLinkEntry {
+  /** The system-graph edge kind the link folds into. */
+  kind: SystemEdgeKind | (string & {});
+  direction: ServiceLinkDirection;
+  /** What established each end's contract; null when unknown. */
+  provider_origin?: ContractOriginWire | null;
+  consumer_origin?: ContractOriginWire | null;
+}
+
+export interface ServiceLinksTotal {
+  kind: SystemEdgeKind | (string & {});
+  direction: ServiceLinkDirection;
+  count: number;
+}
+
+/** `GET /api/workspace/system-graph/links`: one page of links between `a` and `b`. */
+export interface ServiceLinksBetween {
+  a: string;
+  b: string;
+  /** Ordered by direction, kind, contract id, then file. */
+  links: ServiceLinkEntry[];
+  /** Links matching every filter; the page is cut from these. */
+  total: number;
+  /** Links per kind and direction under `q` but not `kind`. */
+  totals: ServiceLinksTotal[];
+}
+
 export interface WorkspaceCoChangeEntry {
   source_repo: string;
   source_file: string;

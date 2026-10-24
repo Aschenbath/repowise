@@ -156,6 +156,37 @@ class WorkspaceContractsResponse(BaseModel):
     by_type: dict[str, int] = {}
 
 
+class WorkspaceServiceLinkEntry(WorkspaceContractLinkEntry):
+    """One link between two services, as ``GET /system-graph/links`` pages them."""
+
+    #: The system-graph edge kind the link folds into (``http``, ``event``, ``db``...).
+    kind: str
+    #: ``a_to_b`` when service ``a`` is the consumer, ``b_to_a`` when ``b`` is.
+    direction: Literal["a_to_b", "b_to_a"]
+    #: What established each end's contract (``route_registration``,
+    #: ``client_call``...), one of ``repowise.core.workspace.origins``. None
+    #: when that end has no stored contract row or predates origins.
+    provider_origin: str | None = None
+    consumer_origin: str | None = None
+
+
+class WorkspaceServiceLinksTotal(BaseModel):
+    kind: str
+    direction: Literal["a_to_b", "b_to_a"]
+    count: int
+
+
+class WorkspaceLinksBetweenResponse(BaseModel):
+    a: str
+    b: str
+    #: One page of links, ordered by direction, kind, contract id, then file.
+    links: list[WorkspaceServiceLinkEntry]
+    #: Links matching every filter; the page is cut from these.
+    total: int
+    #: Links per kind and direction under ``q`` but not ``kind``.
+    totals: list[WorkspaceServiceLinksTotal]
+
+
 class WorkspaceContractDetail(BaseModel):
     """One contract, keyed by ``(repo, file_path, contract_id)``.
 

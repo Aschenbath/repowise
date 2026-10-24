@@ -137,7 +137,7 @@ export default async function EstatePage() {
     },
     {
       label: t("ribbon.links"),
-      value: contracts ? formatNumber(links) : "",
+      value: contracts?.data ? formatNumber(links) : "",
       sub: t("ribbon.linksSub"),
     },
     {

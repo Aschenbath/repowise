@@ -863,8 +863,9 @@ async def get_estate(
 
     from repowise.core.report.estate import build_estate_document
 
-    ws_root = Path(request.app.state.workspace_root)
-    return WorkspaceEstateResponse(**await build_estate_document(ws_root))
+    ws_root = getattr(request.app.state, "workspace_root", None)
+    _require_workspace(ws_root)
+    return WorkspaceEstateResponse(**await build_estate_document(Path(ws_root)))
 
 
 # ---------------------------------------------------------------------------

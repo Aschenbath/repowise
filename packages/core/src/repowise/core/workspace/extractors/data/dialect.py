@@ -17,7 +17,7 @@ from repowise.core.workspace.origins import ContractOrigin
 
 from ..base import line_at
 from ..dialect import build_contract
-from .names import normalize_table_name
+from .names import is_system_table, normalize_table_name
 
 if TYPE_CHECKING:
     from repowise.core.workspace.contracts import Contract
@@ -107,7 +107,7 @@ def build_table_consumer(
     names the embedded engine the file opens, when it opens one.
     """
     table = normalize_table_name(table_raw)
-    if table is None:
+    if table is None or is_system_table(table):
         return None
     engine = embedded_engine(ctx)
     return build_contract(

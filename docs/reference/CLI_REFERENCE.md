@@ -49,7 +49,7 @@ Grouped by task; `PATH` and flags are in each command's section.
   set-default`](#repowise-workspace-set-default-alias), [`workspace diagnostics`](#repowise-workspace-diagnostics),
   [`workspace check`](#repowise-workspace-check), [`workspace metrics`](#repowise-workspace-metrics-path), [`workspace
   impacted-tests`](#repowise-workspace-impacted-tests-repopath)
-- **Maintenance:** [`doctor`](#repowise-doctor-path), [`whats-new`](#repowise-whats-new),
+- **Maintenance:** [`doctor`](#repowise-doctor-path), [`grammars fetch`](#repowise-grammars-fetch-dir), [`whats-new`](#repowise-whats-new),
   [`telemetry`](#repowise-telemetry), [`plugins`](#repowise-plugins), [`config hints`](#repowise-config-hints-onoff),
   [`login`](#repowise-login), [`logout`](#repowise-logout), [`whoami`](#repowise-whoami),
   [`publish`](#repowise-publish-path), [`delete`](#repowise-delete-repo_id), [`uninstall`](#repowise-uninstall-path),
@@ -2061,6 +2061,15 @@ repowise doctor --workspace --repair
   offline. After upgrading, **restart Claude/Codex/Cursor or any MCP client**.
 - **Distill:** validates `distill:` (unknown keys, bad permission values, unknown filters, non-positive store sizing);
   shows omission store size vs cap and whether the opt-in rewrite hook is installed (absence passes).
+
+### `repowise grammars fetch DIR`
+
+Download the grammars that otherwise download on first use (COBOL, Apex) into `DIR`, printing each with its cache
+state. Exits 1 if any fails. Copy `DIR` to the offline machine and set `REPOWISE_GRAMMAR_DIR` to it.
+
+```bash
+repowise grammars fetch ./grammars
+```
 
 ### `repowise whats-new`
 

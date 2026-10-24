@@ -765,9 +765,22 @@ def is_migration_path(path: str) -> bool:
     return split is not None and _is_migration_dir(split[2])
 
 
+# A ``scripts/`` folder inside a served static tree holds the browser scripts
+# the product ships (Spring Boot's ``resources/static/scripts``, a ``public/``
+# folder), not developer tooling.
+_SERVED_DIRS = frozenset({"static", "public", "assets", "_static"})
+_SERVED_SCRIPTS_DIR = "scripts"
+
+
+def _is_tooling_dir(i: int, d: str, dirs: list[str]) -> bool:
+    if d not in _TOOLING_DIR_TOKENS:
+        return False
+    return d != _SERVED_SCRIPTS_DIR or _SERVED_DIRS.isdisjoint(dirs[:i])
+
+
 def _is_tooling(name: str, dirs: list[str]) -> bool:
     return (
-        any(d in _TOOLING_DIR_TOKENS for d in dirs)
+        any(_is_tooling_dir(i, d, dirs) for i, d in enumerate(dirs))
         or bool(dirs and dirs[0] in _TOOLING_ROOT_DIRS)
         or _is_migration_dir(dirs)
         or (not dirs and name in _TOOLING_ROOT_NAMES)

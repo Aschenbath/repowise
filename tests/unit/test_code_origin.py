@@ -78,6 +78,10 @@ _OWN_HEADER = (
         ("tutorial_01/app.py", "docs_example"),
         ("scripts/release.py", "tooling"),
         (".github/scripts/label.js", "tooling"),
+        # Browser scripts a served static tree ships are product code.
+        ("src/main/resources/static/scripts/pages/OwnerDetailsPage.js", "production"),
+        ("public/scripts/app.js", "production"),
+        ("scripts/public/seed.py", "tooling"),
         ("tools/gen.go", "tooling"),
         # Dart's ``tool/`` (flutter samples' CI scripts), but not a shipped one.
         ("tool/ci_script.dart", "tooling"),

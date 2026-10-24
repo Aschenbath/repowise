@@ -10,8 +10,10 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from repowise.core.analysis.external_systems.links import IMPORT_TARGET_LANGUAGES
 from repowise.core.docs_mode import resolve_docs_mode
@@ -517,16 +519,28 @@ async def get_workspace_graph(
 async def get_system_graph(
     ws_config=Depends(get_workspace_config),
     enricher=Depends(get_cross_repo_enricher),
+    view: Literal["map"] | None = Query(
+        None,
+        description=(
+            "`map`: the map's lean view, without diagnostics or structural edge "
+            "refs and with `ref_count` on every edge"
+        ),
+    ),
 ):
     """Service-granular system graph: typed service nodes + directed edges.
 
     Read straight from the ``system_graph.json`` artifact built during workspace
     update. Edge direction is uniform — ``source`` depends on / calls ``target``.
     Returns an empty graph (not 404) when no graph has been built yet.
+    ``view=map`` returns :func:`lean_system_graph` of it instead.
     """
     _require_workspace(ws_config)
 
     graph = enricher.get_system_graph() if enricher is not None else None
+    if view == "map":
+        from repowise.core.workspace.system_map_view import lean_system_graph
+
+        return JSONResponse(lean_system_graph(graph or {}))
     if not graph:
         return WorkspaceSystemGraphResponse()
     return WorkspaceSystemGraphResponse(**graph)

@@ -415,6 +415,36 @@ describe("SystemMapDrawer", () => {
     expect(screen.queryByRole("link", { name: /overview\.py/ })).not.toBeInTheDocument();
   });
 
+  it("states a lean edge's evidence count without claiming it kept none", () => {
+    const { contract_refs: _refs, ...lean } = edge("web", "api", { weight: 2, ref_count: 2 });
+    const g2 = graph([node("web"), node("api")], [lean]);
+    render(
+      <SystemMapDrawer graph={g2} rawGraph={g2} collapsed={false} onClose={() => {}} onSelect={() => {}} selection={{ type: "edge", id: "web->api" }} />,
+    );
+    expect(screen.getByText("2 references")).toBeInTheDocument();
+    expect(screen.getByText(/The graph kept 2 contract ids for this edge/)).toBeInTheDocument();
+    expect(screen.queryByText(/kept no evidence/)).not.toBeInTheDocument();
+  });
+
+  it("reads a service's diagnostics from the host when the graph has none", () => {
+    const { diagnostics: _d, ...lean } = g;
+    render(
+      <SystemMapDrawer
+        {...base}
+        graph={lean}
+        rawGraph={lean}
+        selection={{ type: "node", id: "web" }}
+        onSelect={() => {}}
+        diagnostics={{
+          unmatched_consumers: [
+            { repo: "web", file_path: "client.ts", contract_id: "http::GET::/x", contract_type: "http", reason: "no_provider" },
+          ],
+        } as never}
+      />,
+    );
+    expect(screen.getByText(/1 call from here match/)).toBeInTheDocument();
+  });
+
   it("renders nothing when there is no selection", () => {
     render(<SystemMapDrawer {...base} selection={null} onSelect={() => {}} />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

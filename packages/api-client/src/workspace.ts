@@ -114,13 +114,19 @@ export async function getWorkspaceDiagnostics(
  * The service-granular system graph (nodes = services, typed directed edges)
  * that the Live System Map renders. Thin pass-through over the persisted
  * `system_graph.json` artifact.
+ *
+ * `view: "map"` asks for the map's lean view: no `diagnostics` (read them from
+ * `getWorkspaceDiagnostics`), no `contract_refs` on structural edges, and a
+ * `ref_count` on every edge. A server without the view returns the full graph,
+ * which has the same shape with those fields filled.
  */
 export async function getWorkspaceSystemGraph(
   fetchOptions?: RequestInit,
+  opts?: { view?: "map" },
 ): Promise<WorkspaceSystemGraphResponse> {
   return apiGet<WorkspaceSystemGraphResponse>(
     "/api/workspace/system-graph",
-    undefined,
+    opts?.view ? { view: opts.view } : undefined,
     fetchOptions,
   );
 }

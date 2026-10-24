@@ -12,6 +12,8 @@ says that something was missed and where. Ceilings, stated so they read as
 intent: only extensions some extractor walks are probed; a token in a string
 literal still counts (comments are masked); a file whose calls were located but
 not resolved can be counted here and in ``http_consumer_unresolved`` both.
+Tooling and build files (:func:`outside_runtime`) are skipped: a script calling
+a dev server is not a call the running system misses.
 
 Adding a client library or a language is one entry in :data:`PROBE_ROWS`.
 """

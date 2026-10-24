@@ -96,9 +96,9 @@ def links_between(
         key=lambda m: (
             m[0],
             m[1],
-            m[2].get("contract_id", ""),
-            m[2].get("consumer_file", ""),
-            m[2].get("provider_file", ""),
+            m[2].get("contract_id") or "",
+            m[2].get("consumer_file") or "",
+            m[2].get("provider_file") or "",
         )
     )
     origins = _origins(contracts, repos)
@@ -117,6 +117,8 @@ def links_between(
 
 def _origins(contracts: Iterable[dict], repos: set[str]) -> dict[tuple, str | None]:
     """``(role, repo, file, contract_id) -> origin`` for the pair's repos; first row wins."""
+    # One pass over the stored contracts per call, filtered to two repos. Fine at
+    # census scale; a caller serving many pairs would index once and pass it in.
     out: dict[tuple, str | None] = {}
     for c in contracts:
         if c.get("repo") in repos:

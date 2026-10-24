@@ -322,6 +322,8 @@ def boundaries_from_nodes(nodes: Iterable[dict[str, Any]]) -> dict[str, list[Ser
     every link end the builder resolved became a node, so the deepest boundary
     holding that end is among the nodes, and longest-prefix matching against
     the nodes alone resolves the same end to the same id.
+    That holds for nodes and links written by the same build, which a
+    workspace update always does.
     """
     out: dict[str, list[ServiceBoundary]] = {}
     for node in nodes:
